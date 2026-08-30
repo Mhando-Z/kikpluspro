@@ -4,21 +4,15 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Activity,
-  BadgeDollarSign,
-  BrainCircuit,
-  Braces,
-  CalendarDays,
   ChevronDown,
+  FlaskConical,
   LayoutDashboard,
   Menu,
   Moon,
   Settings2,
-  Shield,
   Sparkles,
   Sun,
-  Trophy,
-  UsersRound,
+  WalletCards,
   X,
 } from "lucide-react";
 import { FaFutbol } from "react-icons/fa6";
@@ -26,18 +20,14 @@ import { useTheme } from "next-themes";
 import { useMemo, useState } from "react";
 
 const navigation = [
-  { href: "/", label: "Overview", icon: LayoutDashboard },
-  { href: "/live", label: "Live center", icon: Activity },
-  { href: "/fixtures", label: "Fixtures", icon: CalendarDays },
-  { href: "/standings", label: "Standings", icon: Trophy },
-  { href: "/teams", label: "Teams", icon: Shield },
-  { href: "/players", label: "Players", icon: UsersRound },
-  { href: "/predictions", label: "AI predictions", icon: Sparkles },
-  { href: "/insights", label: "Insights", icon: BrainCircuit },
-  { href: "/odds", label: "Odds", icon: BadgeDollarSign },
-  { href: "/explorer", label: "API explorer", icon: Braces },
-  { href: "/admin", label: "Sync control", icon: Settings2 },
+  { href: "/", label: "AI overview", icon: LayoutDashboard },
+  { href: "/predictions", label: "Forecasts", icon: Sparkles },
+  { href: "/simulator", label: "Simulator", icon: FlaskConical },
+  { href: "/tracker", label: "Bet tracker", icon: WalletCards },
+  { href: "/admin", label: "Data control", icon: Settings2 },
 ];
+
+const legacyDataRoutes = ["/live", "/fixtures", "/standings", "/teams", "/players", "/insights", "/odds", "/explorer"];
 
 const leagueOptions = [
   { id: "39", label: "Premier League" },
@@ -84,7 +74,7 @@ function Brand() {
       </span>
       <span>
         <span className="block text-base font-black tracking-[-0.03em]">KickPulse</span>
-        <span className="block text-[0.66rem] font-bold uppercase tracking-[0.15em] text-ink-muted">Football intelligence</span>
+        <span className="block text-[0.66rem] font-bold uppercase tracking-[0.15em] text-ink-muted">AI match analytics</span>
       </span>
     </Link>
   );
@@ -100,10 +90,10 @@ function DesktopSidebar() {
       </div>
       <div className="surface-flat mt-5 p-4">
         <div className="flex items-center gap-2 text-xs font-extrabold">
-          <span className="size-2 rounded-full bg-brand" /> Supabase cache ready
+          <span className="size-2 rounded-full bg-brand" /> AI pipeline ready
         </div>
         <p className="mt-2 text-[0.7rem] leading-5 text-ink-muted">
-          One upstream sync can serve every connected supporter.
+          Forecasts, outcomes and model quality in one measured workflow.
         </p>
       </div>
     </aside>
@@ -206,6 +196,16 @@ function LeagueFilter() {
 function Topbar({ onMenu }) {
   const pathname = usePathname();
   const current = navigation.find((item) => item.href === "/" ? pathname === "/" : pathname.startsWith(item.href));
+  const legacyRoute = legacyDataRoutes.some((route) => pathname.startsWith(route));
+  const contextLabel = pathname === "/"
+    ? "Live model performance"
+    : pathname.startsWith("/predictions")
+      ? "Automatic fixture forecasts"
+      : pathname.startsWith("/simulator")
+        ? "Manual probability laboratory"
+        : pathname.startsWith("/tracker")
+          ? "Private browser storage"
+          : "AI operations";
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-canvas/82 px-4 py-3 backdrop-blur-2xl sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-[100rem] items-center justify-between gap-3">
@@ -215,13 +215,11 @@ function Topbar({ onMenu }) {
           </button>
           <div className="min-w-0">
             <p className="truncate text-sm font-extrabold sm:text-base">{current?.label ?? "KickPulse"}</p>
-            <p className="hidden text-[0.68rem] font-semibold text-ink-muted sm:block">Live data, one trusted cache</p>
+            <p className="hidden text-[0.68rem] font-semibold text-ink-muted sm:block">{contextLabel}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {pathname.startsWith("/predictions") ? (
-            <span className="chip hidden sm:inline-flex"><Sparkles className="size-3.5 text-accent" /> Historical model</span>
-          ) : <LeagueFilter />}
+          {legacyRoute ? <LeagueFilter /> : <span className="chip hidden sm:inline-flex"><Sparkles className="size-3.5 text-accent" /> Measured AI</span>}
           <ThemeToggle />
         </div>
       </div>

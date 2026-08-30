@@ -23,7 +23,12 @@ ready to use real football data.
 
 ## Included product areas
 
-- Responsive dashboard
+- AI-first performance overview with correct, incorrect and pending forecasts
+- Monthly prediction activity chart and per-league live accuracy
+- Confidence-group diagnostics and recent settled results
+- Full automatic-forecast reports opened directly from match cards
+- Private IndexedDB bet tracker with stake, odds, profit/loss, ROI and JSON export
+- Separate automatic forecast, manual simulator and tracker routes
 - Live score center with Supabase Realtime updates
 - Upcoming fixtures and recent results
 - League standings and form guide
@@ -40,6 +45,11 @@ ready to use real football data.
 - Protected synchronization control panel
 - Dark and light themes
 - Mobile navigation and accessible reduced-motion behavior
+
+The main navigation is intentionally focused on `/`, `/predictions`,
+`/simulator`, `/tracker` and `/admin`. The API-Football pages remain available
+by direct URL for later reuse, but live scores, fixtures, standings, teams,
+players, insights, odds and the endpoint explorer are hidden from navigation.
 
 ## Endpoint coverage
 
@@ -239,7 +249,7 @@ To persist every pre-match feature snapshot for later XGBoost or LightGBM work:
 npm run ai:train:features
 ~~~
 
-Open `/predictions` after training. See [docs/AI_MODEL.md](docs/AI_MODEL.md) for
+Open `/simulator` after training. See [docs/AI_MODEL.md](docs/AI_MODEL.md) for
 the implementation and leakage rules. See [docs/MODEL_CARD.md](docs/MODEL_CARD.md)
 for the measured 7,082-match benchmark, per-league results and limitations.
 
@@ -274,10 +284,33 @@ npm run ai:fixtures:update
 
 Football-Data.co.uk normally refreshes the upcoming feed on Friday afternoons
 for weekend games and Tuesday for midweek games. Open `/predictions` to see the
-automatic forecasts and tracked live scorecard. The interactive simulator
-remains available below them.
+automatic forecasts and tracked live scorecard. Click any forecast card for a
+full report. The interactive simulator is available separately at `/simulator`.
 
-## 8. Synchronize team crests
+The overview at `/` calculates live post-deployment performance from stored
+automatic predictions. It separates correct, incorrect and pending forecasts,
+then groups accuracy by league and confidence. Run `ai:fixtures:update` after
+results are published so the overview can score completed predictions.
+
+## 8. Track personal bet decisions
+
+From any automatic forecast, open the full report and record a 1X2 selection,
+stake, decimal odds and optional note. KickPulse stores this journal in native
+browser IndexedDB; it does not write personal bets to Supabase and it never
+places a wager.
+
+Open `/tracker` to:
+
+- Check saved fixture IDs against settled Supabase results
+- View won, lost, void and pending records
+- Calculate hit rate, settled profit/loss and ROI
+- Filter the journal and export a JSON backup
+
+The tracker is specific to the current browser profile. Clearing site data or
+moving to another device removes access to the local records unless the user
+has exported a backup.
+
+## 9. Synchronize team crests
 
 KickPulse renders the team logos returned by API-Football and uses the
 provider's documented team-ID media URL as a fallback. The frontend never sends
@@ -306,7 +339,7 @@ club directory, API-Football prediction panels and the separate AI forecast
 workspace. Use the images for team identification and descriptive presentation
 in line with the provider's current terms.
 
-## 9. Schedule API-Football synchronization
+## 10. Schedule API-Football synchronization
 
 Open supabase/snippets/schedule-sync.sql, replace the project URL and sync secret
 placeholders, then run the script in the Supabase SQL Editor.
@@ -339,7 +372,7 @@ The included API-Football examples default to the 2024/25 season because the
 free plan currently rejects newer seasons. The AI importer is independent and
 can ingest later completed seasons when their public CSV exists.
 
-## 10. Add or change an API-Football sync job
+## 11. Add or change an API-Football sync job
 
 Example:
 
@@ -394,14 +427,17 @@ The worker:
 
 ~~~text
 app/
-  api/                       Cache, admin and AI inference routes
-  predictions/               Explainable AI workspace
+  api/ai/                    Model, performance, fixture and result routes
+  predictions/               Automatic explainable forecasts
+  simulator/                 Manual matchup laboratory
+  tracker/                   Private IndexedDB decision journal
   live/ fixtures/ ...        Product pages
 components/
-  football/                  Football UI and realtime components
+  football/                  Forecast, analytics, tracker and football UI
   layout/                    Responsive application shell
 lib/
-  football-ai/               Elo, Poisson, CSV, fixtures and model repository
+  football-ai/               Elo, Poisson, performance, fixtures and repository
+  bets/ client/              Settlement math and IndexedDB persistence
   api-football/              Endpoint catalog, cache, team assets and demo data
   supabase/                  Browser and server clients
 scripts/

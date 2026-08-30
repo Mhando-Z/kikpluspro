@@ -10,7 +10,7 @@ export const metadata = {
     template: "%s · KickPulse",
   },
   description:
-    "A responsive football intelligence dashboard powered by API-Football, Supabase and Next.js.",
+    "An explainable football AI forecasting, model-performance and personal decision-tracking platform powered by Supabase and Next.js.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

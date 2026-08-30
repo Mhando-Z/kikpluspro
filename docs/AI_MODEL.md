@@ -15,7 +15,10 @@ This is a probabilistic analytical product. It does not guarantee an outcome and
 5. `scripts/football-ai/sync-upcoming.mjs` imports the public current-fixture feed, reconstructs post-training form, and stores one automatic forecast per active-model fixture.
 6. `scripts/football-ai/settle-predictions.mjs` imports published final scores, settles stored forecasts, and makes the new matches available to later prediction runs.
 7. `app/api/ai/fixtures/route.js` exposes upcoming forecasts and calculated live performance without exposing the model artifact.
-8. `app/predictions/page.jsx` renders the automatic forecast feed, tracked scorecard and interactive prediction lab.
+8. `app/api/ai/performance/route.js` aggregates every active-model prediction into correct, incorrect, pending, per-league, confidence and monthly metrics.
+9. `app/api/ai/results/route.js` safely resolves saved fixture IDs so the browser-only tracker can settle local records.
+10. `app/predictions/page.jsx` renders automatic forecasts and full report dialogs; `app/simulator/page.jsx` contains the manual prediction lab.
+11. `app/tracker/page.jsx` keeps user-entered decisions in IndexedDB rather than Supabase.
 
 API-Football remains the visual identity source. The AI routes read cached rows
 from the normalized `teams` table and resolve Football-Data names to an
@@ -118,6 +121,15 @@ score are calculated from only those settled pre-match records.
 Use an external scheduler such as GitHub Actions, a server cron job or a hosting
 platform scheduler if you want unattended updates. Keep the Supabase service
 role key in that scheduler's encrypted server-side secrets.
+
+The performance overview distinguishes training-time held-out metrics from
+post-deployment live metrics. Only predictions written before kickoff and later
+settled with an actual result are counted as live correct or incorrect picks.
+Pending fixtures never enter the accuracy denominator.
+
+Personal tracking is intentionally isolated from model evaluation. A user's
+stake, bookmaker odds and notes remain in that browser's IndexedDB and do not
+alter training, calibration or the shared Supabase model scorecard.
 
 If an API-Football crest is unavailable, the UI intentionally displays club
 initials. A missing visual asset must never prevent prediction inference or
