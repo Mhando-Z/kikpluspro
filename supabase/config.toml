@@ -1,0 +1,5 @@
+project_id = "kickpulse-football-hub"
+
+[functions.api-football-sync]
+verify_jwt = false
+

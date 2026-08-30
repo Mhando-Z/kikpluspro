@@ -1,0 +1,18 @@
+import { BrainCircuit, Swords, TrendingUp } from "lucide-react";
+import { DataSourceBadge, InjuryList, PageIntro, PredictionPanel, SectionHeading } from "@/components/football/FootballUI";
+import { getFootballData } from "@/lib/api-football/cache";
+import { competitionParams, responseOf } from "@/lib/api-football/page-data";
+
+export const metadata = { title: "Insights" };
+
+export default async function InsightsPage({ searchParams }) {
+  const competition = await competitionParams(searchParams);
+  const fixturesData = await getFootballData("fixtures", { ...competition, next: "20" }, { allowStale: true });
+  const fixture = responseOf(fixturesData)[0];
+  const fixtureId = fixture?.fixture?.id ?? "1200000";
+  const homeId = fixture?.teams?.home?.id ?? "42", awayId = fixture?.teams?.away?.id ?? "50";
+  const [predictionsData, injuriesData, h2hData] = await Promise.all([getFootballData("predictions", { fixture: fixtureId }, { allowStale: true }), getFootballData("injuries", competition, { allowStale: true }), getFootballData("fixture-headtohead", { h2h: `${homeId}-${awayId}`, last: "5" }, { allowStale: true })]);
+  const prediction = responseOf(predictionsData)[0], injuries = responseOf(injuriesData), h2h = responseOf(h2hData);
+  return <div className="space-y-7"><PageIntro eyebrow="Pre-match intelligence" title="Context before conviction." description="Predictions, recent meetings and player availability sit together, but model output remains clearly separated from bookmaker pricing." actions={<DataSourceBadge meta={predictionsData.meta} />} /><section className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.65fr)]"><PredictionPanel item={prediction} /><div className="surface-panel p-5 sm:p-6"><SectionHeading description="Current injuries and suspensions." title="Availability" /><InjuryList items={injuries} limit={7} /></div></section><section className="surface-panel p-5 sm:p-6"><SectionHeading description="The latest meetings use the same fixture response shape as the main schedule." title="Head-to-head snapshot" /><div className="grid gap-3 md:grid-cols-3">{h2h.slice(0, 3).map((match, index) => <div className="surface-flat p-4" key={match.fixture?.id ?? index}><div className="flex items-center justify-between text-xs text-ink-muted"><span className="flex items-center gap-1"><Swords className="size-3" /> Meeting {index + 1}</span><span>{match.fixture?.date ? new Date(match.fixture.date).toLocaleDateString() : "—"}</span></div><div className="mt-5 flex items-center justify-between gap-4"><p className="min-w-0 truncate text-sm font-black">{match.teams?.home?.name}</p><p className="shrink-0 text-xl font-black">{match.goals?.home ?? 0}:{match.goals?.away ?? 0}</p><p className="min-w-0 truncate text-right text-sm font-black">{match.teams?.away?.name}</p></div></div>)}</div></section><section className="grid gap-4 md:grid-cols-3"><div className="surface-flat p-5"><BrainCircuit className="size-5 text-accent" /><h3 className="mt-4 font-black">Model advice</h3><p className="mt-2 text-xs leading-5 text-ink-muted">Winner, win-or-draw, expected goals and home/draw/away probability.</p></div><div className="surface-flat p-5"><TrendingUp className="size-5 text-brand-strong" /><h3 className="mt-4 font-black">Team comparison</h3><p className="mt-2 text-xs leading-5 text-ink-muted">Form, attack, defence, Poisson distribution and goal metrics.</p></div><div className="surface-flat p-5"><Swords className="size-5 text-warning" /><h3 className="mt-4 font-black">Rivalry context</h3><p className="mt-2 text-xs leading-5 text-ink-muted">Previous meetings remain filterable by league, season and date range.</p></div></section></div>;
+}
+

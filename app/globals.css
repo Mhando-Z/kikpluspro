@@ -1,0 +1,305 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --canvas: #f4f7f6;
+  --canvas-elevated: #ffffff;
+  --surface: rgba(255, 255, 255, 0.9);
+  --surface-soft: #e9efed;
+  --surface-strong: #dce6e2;
+  --ink: #101a17;
+  --ink-muted: #61716b;
+  --line: rgba(16, 26, 23, 0.1);
+  --brand: #0cab78;
+  --brand-strong: #087554;
+  --brand-soft: #dff8ed;
+  --accent: #6e5cf6;
+  --accent-soft: #ece9ff;
+  --warning: #f59e0b;
+  --danger: #ef476f;
+  --shadow: 0 20px 60px rgba(32, 60, 50, 0.1);
+}
+
+.dark {
+  --canvas: #07110e;
+  --canvas-elevated: #0c1814;
+  --surface: rgba(14, 27, 23, 0.9);
+  --surface-soft: #12231d;
+  --surface-strong: #1a3028;
+  --ink: #f1f8f5;
+  --ink-muted: #8ea49c;
+  --line: rgba(225, 245, 237, 0.1);
+  --brand: #31dfa4;
+  --brand-strong: #8af0cc;
+  --brand-soft: rgba(49, 223, 164, 0.12);
+  --accent: #9e91ff;
+  --accent-soft: rgba(158, 145, 255, 0.12);
+  --warning: #fbbf24;
+  --danger: #ff7393;
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-canvas-elevated: var(--canvas-elevated);
+  --color-surface: var(--surface);
+  --color-surface-soft: var(--surface-soft);
+  --color-surface-strong: var(--surface-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --font-sans: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--line);
+}
+
+html {
+  background: var(--canvas);
+  color-scheme: light;
+  scroll-behavior: smooth;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% 4%, color-mix(in srgb, var(--brand) 10%, transparent), transparent 25rem),
+    radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 24rem),
+    var(--canvas);
+  color: var(--ink);
+  font-family: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  outline-offset: 4px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--brand);
+}
+
+::selection {
+  background: var(--brand);
+  color: #04100c;
+}
+
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--surface-strong);
+  border-radius: 999px;
+}
+
+.surface-panel {
+  border: 1px solid var(--line);
+  border-radius: 1.75rem;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.surface-flat {
+  border: 1px solid var(--line);
+  border-radius: 1.5rem;
+  background: var(--canvas-elevated);
+}
+
+.surface-soft {
+  background: var(--surface-soft);
+}
+
+.button-primary,
+.button-secondary,
+.button-ghost {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.9rem;
+  padding: 0.65rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition: transform 180ms ease, background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.button-primary {
+  background: var(--brand);
+  color: #04100c;
+}
+
+.button-primary:hover {
+  transform: translateY(-1px);
+  background: var(--brand-strong);
+}
+
+.button-secondary {
+  border: 1px solid var(--line);
+  background: var(--canvas-elevated);
+  color: var(--ink);
+}
+
+.button-secondary:hover,
+.button-ghost:hover {
+  background: var(--surface-soft);
+}
+
+.button-ghost {
+  color: var(--ink-muted);
+}
+
+.icon-button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--canvas-elevated);
+  color: var(--ink-muted);
+  transition: 180ms ease;
+}
+
+.icon-button:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--brand) 35%, var(--line));
+}
+
+.eyebrow {
+  color: var(--brand-strong);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  padding: 0.4rem 0.7rem;
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.live-dot {
+  position: relative;
+  display: inline-flex;
+  height: 0.5rem;
+  width: 0.5rem;
+  border-radius: 999px;
+  background: var(--danger);
+}
+
+.live-dot::after {
+  position: absolute;
+  inset: -0.25rem;
+  content: "";
+  border: 1px solid var(--danger);
+  border-radius: inherit;
+  animation: live-ping 1.5s ease-out infinite;
+}
+
+.score-grid {
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th {
+  padding: 0.7rem 0.8rem;
+  color: var(--ink-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.data-table td {
+  border-top: 1px solid var(--line);
+  padding: 0.9rem 0.8rem;
+  font-size: 0.84rem;
+}
+
+.data-table tbody tr {
+  transition: background 160ms ease;
+}
+
+.data-table tbody tr:hover {
+  background: color-mix(in srgb, var(--brand) 5%, transparent);
+}
+
+.form-control {
+  min-height: 2.75rem;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--canvas-elevated);
+  padding: 0.65rem 0.85rem;
+  color: var(--ink);
+  font-size: 0.875rem;
+}
+
+.form-control::placeholder {
+  color: var(--ink-muted);
+}
+
+@keyframes live-ping {
+  from { opacity: 0.75; transform: scale(0.7); }
+  to { opacity: 0; transform: scale(1.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
