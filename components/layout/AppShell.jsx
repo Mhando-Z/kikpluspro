@@ -255,16 +255,19 @@ function Topbar({ onMenu }) {
             : "AI operations";
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-canvas/82 px-4 py-3 backdrop-blur-2xl sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-[100rem] items-center justify-between gap-3">
+      <div className="mx-auto flex max-w-400 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <button
-            className="icon-button lg:hidden"
-            onClick={onMenu}
-            type="button"
-            aria-label="Open menu"
-          >
-            <Menu className="size-5" />
-          </button>
+          <div className="md:hidden">
+            <button
+              className="icon-button"
+              onClick={onMenu}
+              type="button"
+              aria-label="Open menu"
+            >
+              <Menu className="size-5" />
+            </button>
+          </div>
+
           <div className="min-w-0">
             <p className="truncate text-sm font-extrabold sm:text-base">
               {current?.label ?? "KickPulse"}
