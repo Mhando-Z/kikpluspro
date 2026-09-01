@@ -62,6 +62,10 @@ function relativeSourceDate(value) {
   }).format(new Date(value))}`;
 }
 
+function stageLabel(value) {
+  return value ? String(value).replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : null;
+}
+
 function ProbabilityBar({ label, value, tone, selected }) {
   const width = Math.max(0, Math.min(100, Number(value || 0) * 100));
   return (
@@ -151,7 +155,10 @@ function ForecastCard({ fixture, index, onOpen }) {
       transition={{ delay: Math.min(index * 0.04, 0.24), duration: 0.35 }}
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="chip"><CircleDot className="size-3 text-brand-strong" /> {fixture.leagueName}</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className="chip"><CircleDot className="size-3 text-brand-strong" /> {fixture.leagueName}</span>
+          <span className="chip"><Sparkles className="size-3 text-accent" /> {prediction.model?.shortFamily ?? "AI model"} v{prediction.model?.version ?? "—"}</span>
+        </div>
         <span className="text-[0.67rem] font-bold text-ink-muted">{kickoffLabel(fixture.kickoffAt)}</span>
       </div>
 
@@ -214,6 +221,7 @@ function oddsFor(fixture, selection) {
 
 function PredictionReport({ fixture, model, onClose }) {
   const prediction = fixture.prediction;
+  const predictionModel = prediction.model ?? model;
   const [selection, setSelection] = useState(prediction.pick.code);
   const [stake, setStake] = useState("");
   const [odds, setOdds] = useState(() => String(oddsFor(fixture, prediction.pick.code) ?? ""));
@@ -249,7 +257,9 @@ function PredictionReport({ fixture, model, onClose }) {
         id: fixture.id,
         fixtureId: fixture.id,
         predictionId: prediction.id,
-        modelVersion: model.version,
+        modelVersion: predictionModel.version,
+        modelKey: predictionModel.modelKey,
+        modelFamily: predictionModel.family,
         leagueCode: fixture.leagueCode,
         leagueName: fixture.leagueName,
         kickoffAt: fixture.kickoffAt,
@@ -278,14 +288,14 @@ function PredictionReport({ fixture, model, onClose }) {
   return createPortal(
     <motion.div className="fixed inset-0 z-[90] overflow-y-auto bg-[#020806]/75 p-3 backdrop-blur-md sm:p-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <motion.section aria-modal="true" className="surface-panel mx-auto my-3 max-w-5xl overflow-hidden" initial={{ opacity: 0, y: 24, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.99 }} role="dialog">
-        <div className="flex items-center justify-between border-b border-line p-4 sm:px-6"><div><p className="eyebrow">Full prediction report</p><p className="mt-1 text-xs text-ink-muted">{fixture.leagueName} · {kickoffLabel(fixture.kickoffAt)}</p></div><button aria-label="Close report" className="icon-button" onClick={onClose} type="button"><X className="size-4" /></button></div>
+        <div className="flex items-center justify-between border-b border-line p-4 sm:px-6"><div><p className="eyebrow">Full prediction report</p><p className="mt-1 text-xs text-ink-muted">{fixture.leagueName}{fixture.competitionStage ? ` · ${stageLabel(fixture.competitionStage)}` : ""} · {kickoffLabel(fixture.kickoffAt)}</p></div><button aria-label="Close report" className="icon-button" onClick={onClose} type="button"><X className="size-4" /></button></div>
         <div className="border-b border-line bg-surface-soft/30 p-5 sm:p-7">
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 text-center">
             <div className="min-w-0"><span className="mx-auto block w-fit"><TeamMark team={fixture.homeTeam} size="lg" /></span><h2 className="mt-2 truncate text-base font-black sm:text-xl">{fixture.homeTeam.name}</h2></div>
             <div><p className="text-[0.6rem] font-extrabold uppercase tracking-[0.14em] text-ink-muted">Model pick</p><p className="mt-1 text-xl font-black text-brand-strong sm:text-2xl">{prediction.pick.label}</p><p className="text-xs font-extrabold text-ink-muted">{percentage(prediction.pick.value, 1)}</p></div>
             <div className="min-w-0"><span className="mx-auto block w-fit"><TeamMark team={fixture.awayTeam} size="lg" /></span><h2 className="mt-2 truncate text-base font-black sm:text-xl">{fixture.awayTeam.name}</h2></div>
           </div>
-          <div className="mt-5 flex flex-wrap justify-center gap-2"><span className="chip capitalize"><Gauge className="size-3.5 text-accent" /> {prediction.confidence} confidence</span><span className="chip"><ShieldCheck className="size-3.5 text-brand-strong" /> Calibrated model v{model.version}</span></div>
+          <div className="mt-5 flex flex-wrap justify-center gap-2"><span className="chip capitalize"><Gauge className="size-3.5 text-accent" /> {prediction.confidence} confidence</span><span className="chip"><ShieldCheck className="size-3.5 text-brand-strong" /> {predictionModel.shortFamily ?? predictionModel.family} v{predictionModel.version}</span>{fixture.neutralVenue ? <span className="chip">Neutral venue</span> : null}</div>
         </div>
         <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.15fr_0.85fr]">
           <div>
@@ -337,7 +347,6 @@ function Scorecard({ performance, recent }) {
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             {[
               [Trophy, "Accuracy", percentage(performance.accuracy, 1)],
-              [Gauge, "Log loss", decimal(performance.logLoss, 3)],
               [Target, "Brier score", decimal(performance.brierScore, 3)],
             ].map(([Icon, label, value]) => (
               <div className="rounded-2xl border border-line bg-surface-soft/50 p-4" key={label}>
@@ -428,10 +437,10 @@ export function AutomatedForecasts() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="eyebrow">Automatic forecasts</p>
-              <span className="chip"><Sparkles className="size-3.5 text-accent" /> Active model v{state.data.model.version}</span>
+              <span className="chip"><Sparkles className="size-3.5 text-accent" /> {state.data.models.length} active model {state.data.models.length === 1 ? "family" : "families"}</span>
             </div>
             <h2 className="mt-3 text-2xl font-black tracking-[-0.04em]">The next fixtures, scored before kickoff.</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Calibrated 1X2 probabilities, expected goals and likely scores generated from your Supabase model artifact.</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Competition-aware routing sends domestic fixtures to the Big Five model and Champions League fixtures to the UCL specialist.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <a className="button-ghost text-xs" href={state.data.source.url} target="_blank" rel="noreferrer">

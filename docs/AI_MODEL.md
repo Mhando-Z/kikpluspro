@@ -21,6 +21,10 @@ This is a probabilistic analytical product. It does not guarantee an outcome and
 11. `app/api/ai/results/route.js` safely resolves saved fixture IDs so the browser-only tracker can settle local records.
 12. `app/predictions/page.jsx` renders automatic forecasts and full report dialogs; `app/simulator/page.jsx` contains the manual prediction lab.
 13. `app/tracker/page.jsx` keeps user-entered decisions in IndexedDB rather than Supabase.
+14. `scripts/football-ai/import-ucl-history.mjs` imports CC0 Champions League history and normalizes European club identities.
+15. `scripts/football-ai/train-ucl.mjs` creates a separately versioned UCL specialist, incorporates linked historical xG/statistics, and evaluates it only on chronological UCL matches.
+16. `lib/thestatsapi/ucl-fixtures.js` supplies current UCL fixtures/results/crests during the trial; Football-Data.org is the automatic fallback.
+17. `scripts/football-ai/sync-upcoming.mjs` selects the active model by competition code: `CL` uses the UCL family and domestic codes use the Big Five family.
 
 API-Football remains the visual identity source. The AI routes read cached rows
 from the normalized `teams` table and resolve Football-Data names to an
@@ -40,6 +44,7 @@ The importer supports these top-flight league codes:
 | `I1` | Serie A | Italy |
 | `D1` | Bundesliga | Germany |
 | `F1` | Ligue 1 | France |
+| `CL` | UEFA Champions League | Europe |
 
 Rows include the final result, goals, shots, shots on target, disciplinary statistics, optional xG, and selected market odds when the source supplies them. Result fields are never used as inputs for their own match.
 
@@ -92,6 +97,10 @@ npm run ai:import:dry -- --seasons=2024,2025 --leagues=E0,SP1
 npm run ai:import -- --from=2010 --to=2025
 npm run ai:train
 npm run ai:train:features
+npm run ai:ucl:import -- --from=2011 --to=2025
+npm run ai:ucl:enrich:sample -- --seasons=2024
+npm run ai:ucl:enrich -- --seasons=2022,2023,2024,2025
+npm run ai:ucl:train
 npm run ai:fixtures:dry
 npm run ai:fixtures:sync
 npm run ai:fixtures:settle
@@ -111,15 +120,24 @@ converts source times from Europe/London to UTC, upserts teams and fixtures, and
 creates deterministic prediction audit rows. Re-running it updates the same
 fixture and prediction records.
 
+When `THESTATSAPI_KEY` is configured, the same command prefers its Champions
+League feed. On provider failure or after the trial key is removed, it uses the
+Football-Data.org `CL` endpoint. A provider-neutral fixture key prevents the
+same match being duplicated when the source changes. Each fixture is routed by
+`league_code` to its own active `model_key`; a missing specialist causes a
+visible skip, never a domestic-model fallback. UCL stage, format era, leg and
+neutral-venue context are retained in fixtures and prediction snapshots.
+
 The active training artifact is immutable. Before inference, the sync script
 clones that artifact and applies completed `ai_matches` later than its
 `trained_to` date. This derived state gives future forecasts current Elo and
 form without corrupting the benchmarked model version.
 
-`ai:fixtures:settle` checks past scheduled fixtures against the current season
-result CSV, stores newly completed matches, and attaches the actual result to
-every prediction made for that fixture. Accuracy, log loss and multiclass Brier
-score are calculated from only those settled pre-match records.
+`ai:fixtures:settle` checks domestic fixtures against the current season result
+CSV and UCL fixtures against the preferred/fallback provider. A natural match
+key prevents a UCL result already imported from OpenFootball or another feed
+from being added twice. It attaches the actual result to every pre-match
+prediction; only those settled records enter accuracy, log loss and Brier score.
 
 Use an external scheduler such as GitHub Actions, a server cron job or a hosting
 platform scheduler if you want unattended updates. Keep the Supabase service

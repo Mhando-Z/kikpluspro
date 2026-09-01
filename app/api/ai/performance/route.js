@@ -1,20 +1,20 @@
 import { NextResponse } from "next/server";
 import { loadCachedTeamAssetResolver } from "@/lib/api-football/team-assets";
-import { FOOTBALL_DATA_LEAGUES } from "@/lib/football-ai/constants";
+import { AI_MODEL_KEY, FOOTBALL_DATA_LEAGUES } from "@/lib/football-ai/constants";
 import { pickForPrediction, summarizePredictions } from "@/lib/football-ai/performance";
-import { getActiveModelRecord } from "@/lib/football-ai/repository";
+import { getActiveModelRecords, safeModelIdentity } from "@/lib/football-ai/repository";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-async function allPredictions(supabase, modelId) {
+async function allPredictions(supabase, modelIds) {
   const rows = [];
   const size = 1000;
   for (let offset = 0; ; offset += size) {
     const { data, error } = await supabase
       .from("ai_predictions")
-      .select("id,fixture_id,league_code,kickoff_at,home_team_key,away_team_key,home_win_probability,draw_probability,away_win_probability,confidence,actual_result,actual_home_goals,actual_away_goals,settled_at,created_at")
-      .eq("model_version_id", modelId)
+      .select("id,model_version_id,fixture_id,league_code,kickoff_at,home_team_key,away_team_key,home_win_probability,draw_probability,away_win_probability,confidence,actual_result,actual_home_goals,actual_away_goals,settled_at,created_at")
+      .in("model_version_id", modelIds)
       .order("created_at", { ascending: false })
       .range(offset, offset + size - 1);
     if (error) throw error;
@@ -28,7 +28,7 @@ async function recentFixtures(supabase, ids) {
   if (!ids.length) return [];
   const { data, error } = await supabase
     .from("ai_fixtures")
-    .select("id,league_code,league_name,country_code,kickoff_at,home_team_name,away_team_name,home_goals,away_goals,result")
+    .select("id,league_code,league_name,country_code,kickoff_at,home_team_name,away_team_name,home_goals,away_goals,result,source_payload")
     .in("id", ids);
   if (error) throw error;
   return data ?? [];
@@ -41,17 +41,17 @@ export async function GET() {
   }
 
   try {
-    const { record, error } = await getActiveModelRecord();
+    const { records, error } = await getActiveModelRecords();
     if (error) throw new Error(error);
-    if (!record) {
+    if (!records.length) {
       return NextResponse.json({ ready: false, error: "No active model exists. Run npm run ai:train." }, { status: 404 });
     }
 
-    const predictions = await allPredictions(supabase, record.id);
+    const predictions = await allPredictions(supabase, records.map((record) => record.id));
     const summary = summarizePredictions(predictions);
     summary.byLeague = summary.byLeague.map((item) => ({
       ...item,
-      label: FOOTBALL_DATA_LEAGUES[item.key]?.name ?? item.label,
+      label: item.key === "CL" ? "UEFA Champions League" : FOOTBALL_DATA_LEAGUES[item.key]?.name ?? item.label,
     }));
 
     const recentPredictions = predictions
@@ -60,6 +60,7 @@ export async function GET() {
       .slice(0, 12);
     const fixtures = await recentFixtures(supabase, recentPredictions.map((row) => row.fixture_id));
     const fixtureById = new Map(fixtures.map((fixture) => [fixture.id, fixture]));
+    const modelById = new Map(records.map((record) => [record.id, record]));
     const resolveTeamAsset = await loadCachedTeamAssetResolver(supabase);
     const recent = recentPredictions.flatMap((prediction) => {
       const fixture = fixtureById.get(prediction.fixture_id);
@@ -67,14 +68,16 @@ export async function GET() {
       const pick = pickForPrediction(prediction);
       const homeAsset = resolveTeamAsset({ name: fixture.home_team_name, countryCode: fixture.country_code });
       const awayAsset = resolveTeamAsset({ name: fixture.away_team_name, countryCode: fixture.country_code });
+      const model = modelById.get(prediction.model_version_id);
       return [{
         id: prediction.id,
         fixtureId: fixture.id,
         leagueCode: fixture.league_code,
         leagueName: fixture.league_name,
         kickoffAt: fixture.kickoff_at,
-        homeTeam: { name: fixture.home_team_name, logo: homeAsset?.logo ?? null, apiFootballId: homeAsset?.apiFootballId ?? null },
-        awayTeam: { name: fixture.away_team_name, logo: awayAsset?.logo ?? null, apiFootballId: awayAsset?.apiFootballId ?? null },
+        homeTeam: { name: fixture.home_team_name, logo: fixture.source_payload?.homeCrest ?? homeAsset?.logo ?? null, apiFootballId: homeAsset?.apiFootballId ?? null },
+        awayTeam: { name: fixture.away_team_name, logo: fixture.source_payload?.awayCrest ?? awayAsset?.logo ?? null, apiFootballId: awayAsset?.apiFootballId ?? null },
+        model: safeModelIdentity(model),
         predicted: pick,
         actualResult: prediction.actual_result,
         score: { home: fixture.home_goals, away: fixture.away_goals },
@@ -83,17 +86,16 @@ export async function GET() {
       }];
     });
 
+    const primary = records.find((record) => record.model_key === AI_MODEL_KEY) ?? records[0];
+    const modelFamilies = records.map((record) => {
+      const familyPredictions = predictions.filter((prediction) => prediction.model_version_id === record.id);
+      return { ...safeModelIdentity(record), performance: summarizePredictions(familyPredictions) };
+    });
+
     return NextResponse.json({
       ready: true,
-      model: {
-        version: record.version,
-        algorithm: record.algorithm,
-        trainedTo: record.trained_to,
-        trainingRows: record.training_rows,
-        validationRows: record.validation_rows,
-        testRows: record.test_rows,
-        testMetrics: record.metrics?.test ?? null,
-      },
+      model: safeModelIdentity(primary),
+      modelFamilies,
       performance: summary,
       recent,
     }, { headers: { "cache-control": "private, max-age=0, must-revalidate" } });

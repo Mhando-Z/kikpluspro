@@ -7,6 +7,7 @@ import {
   nameSimilarity,
   normalizeMatchOdds,
   normalizeMatchStats,
+  providerMatchRow,
 } from "../../lib/thestatsapi/transform.js";
 
 const providerMatch = {
@@ -23,6 +24,25 @@ test("competition discovery maps only supported top leagues", () => {
   assert.equal(leagueCodeForCompetition({ name: "LaLiga", country: "Spain" }), "SP1");
   assert.equal(leagueCodeForCompetition({ id: "comp_0976", name: "LaLiga 2", country: "Spain" }), null);
   assert.equal(leagueCodeForCompetition({ name: "Championship", country: "England" }), null);
+  assert.equal(leagueCodeForCompetition({ name: "UEFA Champions League", country: "Europe" }), "CL");
+});
+
+test("provider UCL matches preserve specialist context without inventing missing scores", () => {
+  const row = providerMatchRow({
+    ...providerMatch,
+    competition_id: "comp_ucl",
+    season_id: "season_2025",
+    stage: "ROUND_OF_16",
+    score: { home: null, away: null },
+    home_team: { id: "tm_1", name: "Manchester United", country_code: "ENG" },
+    away_team: { id: "tm_2", name: "Paris Saint-Germain", country_code: "FRA" },
+  }, { leagueCode: "CL", seasonStart: 2025 });
+  assert.equal(row.home_team_key, "football-data:england:man-united");
+  assert.equal(row.away_team_key, "football-data:france:paris-sg");
+  assert.equal(row.competition_stage, "round_of_16");
+  assert.equal(row.format_era, "league-phase");
+  assert.equal(row.home_goals, null);
+  assert.equal(row.away_goals, null);
 });
 
 test("provider matches link to Football-Data rows using date, names and score", () => {
@@ -117,6 +137,21 @@ test("provider aliases cover the observed Big Five team-name differences", () =>
   assert.ok(nameSimilarity("Manchester City", "Manchester United") < 0.8);
 });
 
+test("provider aliases cover common UCL archive naming differences", () => {
+  const aliases = [
+    ["PSV Eindhoven", "PSV"],
+    ["Sporting CP", "Sporting Lisbon"],
+    ["FC Red Bull Salzburg", "Salzburg"],
+    ["FC København", "Copenhagen"],
+    ["Crvena zvezda", "Red Star Belgrade"],
+    ["Dynamo Kiev", "Dynamo Kyiv"],
+    ["FC Internazionale Milano", "Inter Milan"],
+  ];
+  for (const [providerName, archiveName] of aliases) {
+    assert.equal(nameSimilarity(providerName, archiveName), 1, `${providerName} should match ${archiveName}`);
+  }
+});
+
 test("match stats normalize xG, npxG and sustainable shot features", () => {
   const row = normalizeMatchStats(providerMatch, { data: {
     overview: {
@@ -128,10 +163,19 @@ test("match stats normalize xG, npxG and sustainable shot features", () => {
       shots_on_target: { all: { home: 6, away: 2 } },
     },
     np_expected_goals: { all: { home: 1.4, away: 0.8 } },
+    set_pieces: { corners: { all: { home: 7, away: 3 } } },
+    discipline: {
+      fouls: { all: { home: 11, away: 13 } },
+      yellow_cards: { all: { home: 2, away: 4 } },
+      red_cards: { all: { home: null, away: 1 } },
+    },
   } }, "ai-1");
   assert.equal(row.home_xg, 1.7);
   assert.equal(row.home_npxg, 1.4);
   assert.equal(row.away_shots_on_target, 2);
+  assert.equal(row.home_corners, 7);
+  assert.equal(row.away_yellow, 4);
+  assert.equal(row.home_red, null);
   assert.equal(row.coverage.stats, true);
 });
 

@@ -42,3 +42,19 @@ test("TheStatsAPI client retries rate limits and accepts optional 404 responses"
   assert.equal(client.metrics.retries, 1);
   assert.equal(client.metrics.notFound, 1);
 });
+
+test("TheStatsAPI client stops before exceeding the configured run budget", async () => {
+  const client = createStatsApiClient({
+    apiKey: "test-key",
+    maxRequests: 1,
+    sleep: async () => {},
+    fetchImpl: async () => new Response(JSON.stringify({ data: { ok: true } }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+  });
+  await client.get("/first");
+  await assert.rejects(client.get("/second"), /request budget of 1 was reached/);
+  assert.equal(client.metrics.requests, 1);
+  assert.equal(client.metrics.budget, 1);
+});

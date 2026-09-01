@@ -120,6 +120,32 @@ function LeaguePerformance({ rows }) {
   );
 }
 
+function ModelFamilies({ rows }) {
+  return (
+    <section className="surface-panel p-5 sm:p-6">
+      <p className="eyebrow">Model router</p>
+      <h2 className="mt-2 text-xl font-black tracking-[-0.035em]">Separate scorecards by competition family</h2>
+      <p className="mt-1 text-xs leading-5 text-ink-muted">Domestic and Champions League predictions are trained, versioned, routed and evaluated independently.</p>
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        {rows.map((model) => (
+          <article className="rounded-2xl border border-line bg-surface-soft/45 p-4" key={model.modelKey}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-black">{model.family}</p>
+              <span className="chip"><BrainCircuit className="size-3.5 text-accent" /> v{model.version}</span>
+            </div>
+            <p className="mt-1 text-[0.65rem] text-ink-muted">{model.algorithm}</p>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-xl bg-canvas-elevated p-3"><p className="text-[0.6rem] font-bold text-ink-muted">Forecasts</p><p className="mt-1 font-black">{model.performance.total}</p></div>
+              <div className="rounded-xl bg-canvas-elevated p-3"><p className="text-[0.6rem] font-bold text-ink-muted">Settled</p><p className="mt-1 font-black">{model.performance.settled}</p></div>
+              <div className="rounded-xl bg-canvas-elevated p-3"><p className="text-[0.6rem] font-bold text-ink-muted">Accuracy</p><p className="mt-1 font-black">{percentage(model.performance.accuracy)}</p></div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ConfidencePanel({ rows, streak }) {
   return (
     <section className="surface-panel p-5 sm:p-6">
@@ -197,6 +223,7 @@ export function ModelOverview() {
         <>
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{cards.map(([Icon, label, value, detail, tone], index) => <MetricCard icon={Icon} label={label} value={value} detail={detail} tone={tone} index={index} key={label} />)}</section>
           <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]"><TrendChart timeline={metrics.timeline} /><ConfidencePanel rows={metrics.byConfidence} streak={metrics.currentStreak} /></section>
+          <ModelFamilies rows={state.data.modelFamilies ?? []} />
           <LeaguePerformance rows={metrics.byLeague} />
           <section className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
             <RecentResults rows={state.data.recent} />

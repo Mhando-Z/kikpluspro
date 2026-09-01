@@ -9,7 +9,8 @@ KickPulse is a production-style football intelligence starter built with:
 - Supabase PostgreSQL, Realtime and Edge Functions
 - API-Football v3
 - A calibrated JavaScript Elo + Poisson prediction pipeline
-- Temporary TheStatsAPI historical enrichment with no production dependency
+- A separately trained UEFA Champions League specialist with automatic model routing
+- Temporary TheStatsAPI historical enrichment and preferred UCL feed with a free fallback
 
 It stores API-Football responses in Supabase before serving them to the Next.js
 application. One backend request can therefore supply every connected user.
@@ -39,6 +40,7 @@ ready to use real football data.
 - Predictions, injuries and head-to-head insights
 - Interactive calibrated match simulator with expected goals and score probabilities
 - Automatic current-fixture forecasts and a settled-result scorecard
+- Competition-aware domestic/UCL model switching with separately measured performance
 - Per-league accuracy, log loss, Brier score and market benchmarking
 - Versioned model training, held-out metrics and prediction audit records
 - Pre-match and live odds
@@ -60,8 +62,9 @@ by https://livescore.football-data.co.uk/. It offers All matches, In play, Not
 started and Finished views and does not consume API-Football quota.
 
 The widget is display-only. LiveXscores advertises structured data as a paid
-feed, so KickPulse does not scrape or reverse-engineer the widget. Completed
-predictions continue to be settled from Football-Data's season CSVs:
+feed, so KickPulse does not scrape or reverse-engineer the widget. Domestic
+predictions are settled from Football-Data's season CSVs; UCL predictions use
+the preferred TheStatsAPI feed with Football-Data.org fallback:
 
 ~~~bash
 npm run ai:fixtures:settle
@@ -158,6 +161,8 @@ supabase/migrations/202608290001_kickpulse_schema.sql
 supabase/migrations/202608300001_football_ai.sql
 supabase/migrations/202608300002_prediction_tracking.sql
 supabase/migrations/202608310001_sustainable_learning.sql
+supabase/migrations/202609010001_ucl_specialist.sql
+supabase/migrations/202609010002_thestatsapi_ucl.sql
 ~~~
 
 Then run supabase/seed.sql.
@@ -193,9 +198,13 @@ NEXT_PUBLIC_DEFAULT_LEAGUE_ID=39
 NEXT_PUBLIC_DEFAULT_SEASON=2024
 FOOTBALL_DATA_BASE_URL=https://www.football-data.co.uk/mmz4281
 FOOTBALL_DATA_FIXTURES_URL=https://www.football-data.co.uk/fixtures.csv
+FOOTBALL_DATA_ORG_API_KEY=YOUR_SERVER_ONLY_FREE_KEY
+FOOTBALL_DATA_ORG_BASE_URL=https://api.football-data.org/v4
+OPENFOOTBALL_UCL_BASE_URL=https://raw.githubusercontent.com/openfootball/champions-league/master
 THESTATSAPI_KEY=YOUR_SERVER_ONLY_TRIAL_KEY
 THESTATSAPI_BASE_URL=https://api.thestatsapi.com/api
 THESTATSAPI_REQUESTS_PER_MINUTE=220
+THESTATSAPI_MAX_REQUESTS_PER_RUN=45000
 AI_AUDIT_PREDICTIONS=false
 ~~~
 
@@ -285,9 +294,10 @@ for the measured 7,082-match benchmark, per-league results and limitations.
 
 ## 7. Track current fixtures and results
 
-The latest-fixture feed comes from the same public Football-Data.co.uk source as
-the training data. It does not need an API key or consume API-Football calls.
-Validate the available window, then sync fixtures and generate predictions:
+The domestic fixture feed comes from the same public Football-Data.co.uk source
+as the training data. UCL fixtures use the preferred provider/fallback strategy
+described below. Neither path consumes API-Football calls. Validate the window,
+then sync fixtures and generate predictions:
 
 ~~~bash
 npm run ai:fixtures:dry
@@ -316,6 +326,40 @@ Football-Data.co.uk normally refreshes the upcoming feed on Friday afternoons
 for weekend games and Tuesday for midweek games. Open `/predictions` to see the
 automatic forecasts and tracked live scorecard. Click any forecast card for a
 full report. The interactive simulator is available separately at `/simulator`.
+
+### Champions League specialist
+
+KickPulse deliberately does not mix Champions League forecasts into the
+domestic model family. Historical main-competition results come from the CC0
+OpenFootball archive. During the trial, TheStatsAPI is the preferred UCL
+enrichment and current fixture/result/crest provider. Football-Data.org remains
+the automatic free fallback, so inference has no paid production dependency.
+
+After applying both UCL migrations, run the quota-light sample before the full
+archive and training sequence:
+
+~~~bash
+npm run ai:ucl:import:dry -- --from=2011 --to=2025
+npm run ai:ucl:import -- --from=2011 --to=2025
+npm run ai:ucl:enrich:sample -- --seasons=2024
+npm run ai:ucl:enrich -- --seasons=2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025
+npm run ai:ucl:train
+npm run ai:fixtures:sync
+~~~
+
+The UCL trainer uses domestic results to seed shared club strength, but its
+calibration and held-out scorecard contain only Champions League matches. The
+fixture sync routes `CL` to `uefa-champions-league` and the five domestic codes
+to `elo-poisson-global`. If the UCL model is missing, Champions League fixtures
+are skipped rather than silently predicted by the wrong family.
+
+TheStatsAPI payloads are stored idempotently in Supabase. Odds are retained for
+evaluation and never used as match outcomes. Post-match xG/statistics can only
+affect later fixtures. Remove `THESTATSAPI_KEY` when the trial ends; fixture
+sync and settlement then fall back to Football-Data.org automatically.
+
+See [docs/UCL_SPECIALIST.md](docs/UCL_SPECIALIST.md) for the full data,
+training, routing and operating guide.
 
 The overview at `/` calculates live post-deployment performance from stored
 automatic predictions. It separates correct, incorrect and pending forecasts,

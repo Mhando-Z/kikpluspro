@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getActiveModelRecord } from "@/lib/football-ai/repository";
+import { AI_MODEL_KEY } from "@/lib/football-ai/constants";
+import { getActiveModelRecords, safeModelIdentity } from "@/lib/football-ai/repository";
 import { loadCachedTeamAssetResolver } from "@/lib/api-football/team-assets";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -24,7 +25,7 @@ function impliedMarket(fixture) {
   };
 }
 
-function predictionPayload(prediction) {
+function predictionPayload(prediction, model) {
   if (!prediction) return null;
   const outcomes = [
     { code: "H", label: "Home win", value: finite(prediction.home_win_probability) },
@@ -34,6 +35,7 @@ function predictionPayload(prediction) {
   const pick = outcomes.reduce((best, outcome) => outcome.value > best.value ? outcome : best);
   return {
     id: prediction.id,
+    model: safeModelIdentity(model),
     probabilities: {
       homeWin: outcomes[0].value,
       draw: outcomes[1].value,
@@ -62,22 +64,27 @@ function fixturePayload(fixture, prediction, resolveTeamAsset) {
   const awayAsset = resolveTeamAsset?.({ name: fixture.away_team_name, countryCode: fixture.country_code });
   return {
     id: fixture.id,
+    sourceKey: fixture.source_key,
     leagueCode: fixture.league_code,
     leagueName: fixture.league_name,
     kickoffAt: fixture.kickoff_at,
     homeTeam: {
       key: fixture.home_team_key,
       name: fixture.home_team_name,
-      logo: homeAsset?.logo ?? null,
+      logo: fixture.source_payload?.homeCrest ?? homeAsset?.logo ?? null,
       apiFootballId: homeAsset?.apiFootballId ?? null,
     },
     awayTeam: {
       key: fixture.away_team_key,
       name: fixture.away_team_name,
-      logo: awayAsset?.logo ?? null,
+      logo: fixture.source_payload?.awayCrest ?? awayAsset?.logo ?? null,
       apiFootballId: awayAsset?.apiFootballId ?? null,
     },
     status: fixture.status,
+    competitionStage: fixture.competition_stage ?? null,
+    formatEra: fixture.format_era ?? null,
+    knockoutLeg: fixture.leg ?? null,
+    neutralVenue: Boolean(fixture.neutral_venue),
     result: fixture.result,
     score: fixture.home_goals === null || fixture.away_goals === null
       ? null
@@ -89,7 +96,7 @@ function fixturePayload(fixture, prediction, resolveTeamAsset) {
     },
     marketProbabilities: impliedMarket(fixture),
     sourceLastModified: fixture.source_last_modified,
-    prediction: predictionPayload(prediction),
+    prediction: predictionPayload(prediction?.row, prediction?.model),
   };
 }
 
@@ -125,9 +132,9 @@ export async function GET() {
   if (!supabase) {
     return NextResponse.json({ ready: false, error: "Supabase server credentials are not configured." }, { status: 503 });
   }
-  const { record, error: modelError } = await getActiveModelRecord();
+  const { records, error: modelError } = await getActiveModelRecords();
   if (modelError) return NextResponse.json({ ready: false, error: modelError }, { status: 503 });
-  if (!record) {
+  if (!records.length) {
     return NextResponse.json({ ready: false, error: "No active model exists. Run npm run ai:train." }, { status: 404 });
   }
 
@@ -160,14 +167,18 @@ export async function GET() {
     const { data, error } = await supabase
       .from("ai_predictions")
       .select("*")
-      .eq("model_version_id", record.id)
+      .in("model_version_id", records.map((record) => record.id))
       .in("fixture_id", fixtureIds);
     if (error) return NextResponse.json({ ready: false, error: error.message }, { status: 503 });
     predictions = data ?? [];
   }
 
   const resolveTeamAsset = await loadCachedTeamAssetResolver(supabase);
-  const predictionByFixture = new Map(predictions.map((prediction) => [prediction.fixture_id, prediction]));
+  const modelById = new Map(records.map((record) => [record.id, record]));
+  const predictionByFixture = new Map(predictions.map((prediction) => [prediction.fixture_id, {
+    row: prediction,
+    model: modelById.get(prediction.model_version_id),
+  }]));
   const rows = (fixtures ?? []).map((fixture) => fixturePayload(
     fixture,
     predictionByFixture.get(fixture.id),
@@ -183,12 +194,18 @@ export async function GET() {
 
   return NextResponse.json({
     ready: true,
-    model: { version: record.version, algorithm: record.algorithm, trainedTo: record.trained_to },
+    model: safeModelIdentity(records.find((record) => record.model_key === AI_MODEL_KEY) ?? records[0]),
+    models: records.map(safeModelIdentity),
     source: {
-      name: "Football-Data.co.uk latest fixtures",
+      name: records.length > 1 ? "Football-Data.co.uk + preferred UCL feed" : "Football-Data.co.uk latest fixtures",
       url: "https://www.football-data.co.uk/matches.php",
       lastModified: lastSourceUpdate || null,
     },
+    sources: [
+      { code: "domestic", name: "Football-Data.co.uk", url: "https://www.football-data.co.uk/matches.php" },
+      { code: "CL-preferred", name: "TheStatsAPI (trial)", url: "https://www.thestatsapi.com/" },
+      { code: "CL-fallback", name: "Football-Data.org", url: "https://www.football-data.org/" },
+    ],
     upcoming,
     recent,
     performance: performance(predictions),

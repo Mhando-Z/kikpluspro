@@ -2,6 +2,14 @@ import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { fetchFixtureFeed, syncFixtureFeed } from "../../lib/football-ai/fixtures.js";
 import {
+  AI_MODEL_KEY,
+  modelFamilyForKey,
+  modelKeyForCompetition,
+  UCL_MODEL_KEY,
+} from "../../lib/football-ai/constants.js";
+import { fetchUclFixtures, syncUclFixtures } from "../../lib/football-ai/ucl-fixtures.js";
+import { fetchStatsApiUclFixtures, syncStatsApiUclFixtures } from "../../lib/thestatsapi/ucl-fixtures.js";
+import {
   cloneModelState,
   predictMatch,
   sortMatchesChronologically,
@@ -27,49 +35,39 @@ function fixturePredictionKey(modelId, fixtureId) {
   return createHash("sha256").update(`${modelId}:${fixtureId}`).digest("hex");
 }
 
-async function fetchAllRecentMatches(supabase, trainedTo) {
-  const pageSize = 1000;
+async function fetchAllRecentMatches(supabase, trainedTo, modelKey) {
   const matches = [];
-  for (let offset = 0; ; offset += pageSize) {
-    let query = supabase
-      .from("ai_matches")
-      .select("*")
-      .order("match_date", { ascending: true })
-      .order("id", { ascending: true })
-      .range(offset, offset + pageSize - 1);
+  for (let offset = 0; ; offset += 1000) {
+    let query = supabase.from("ai_matches").select("*")
+      .order("match_date", { ascending: true }).order("id", { ascending: true })
+      .range(offset, offset + 999);
     if (trainedTo) query = query.gt("match_date", trainedTo);
+    if (modelKey === AI_MODEL_KEY) query = query.neq("league_code", "CL");
     const { data, error } = await query;
     if (error) throw new Error(`Could not load post-training results: ${error.message}`);
     matches.push(...(data ?? []));
-    if (!data || data.length < pageSize) break;
+    if (!data || data.length < 1000) break;
   }
   return matches;
 }
 
-async function activeModel(supabase) {
-  const { data, error } = await supabase
-    .from("ai_model_versions")
-    .select("id,version,algorithm,trained_to,artifact")
-    .eq("is_active", true)
-    .eq("status", "ready")
-    .order("version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(`Could not load the active model: ${error.message}`);
-  if (!data?.artifact) throw new Error("No active ready model exists. Run npm run ai:train first.");
-  return data;
+async function activeModels(supabase) {
+  const { data, error } = await supabase.from("ai_model_versions")
+    .select("id,model_key,version,algorithm,trained_to,artifact")
+    .eq("is_active", true).eq("status", "ready");
+  if (error) throw new Error(`Could not load active models: ${error.message}`);
+  const records = new Map((data ?? []).filter((row) => row.artifact).map((row) => [row.model_key, row]));
+  if (!records.has(AI_MODEL_KEY)) throw new Error("No active domestic model exists. Run npm run ai:train first.");
+  return records;
 }
 
 async function scheduledFixtures(supabase, days) {
   const now = new Date();
   const end = new Date(now);
   end.setUTCDate(end.getUTCDate() + days);
-  const { data, error } = await supabase
-    .from("ai_fixtures")
-    .select("*")
+  const { data, error } = await supabase.from("ai_fixtures").select("*")
     .eq("status", "scheduled")
-    .gt("kickoff_at", now.toISOString())
-    .lt("kickoff_at", end.toISOString())
+    .gt("kickoff_at", now.toISOString()).lt("kickoff_at", end.toISOString())
     .order("kickoff_at", { ascending: true });
   if (error) throw new Error(`Could not load upcoming fixtures: ${error.message}`);
   return data ?? [];
@@ -100,8 +98,7 @@ function predictionRow(model, fixture, prediction) {
 
 async function upsertPredictions(supabase, rows) {
   for (let index = 0; index < rows.length; index += 250) {
-    const { error } = await supabase
-      .from("ai_predictions")
+    const { error } = await supabase.from("ai_predictions")
       .upsert(rows.slice(index, index + 250), { onConflict: "prediction_key" });
     if (error) throw new Error(`Could not store automatic predictions: ${error.message}`);
   }
@@ -109,23 +106,49 @@ async function upsertPredictions(supabase, rows) {
 
 function countsByLeague(fixtures) {
   return Object.entries(Object.groupBy(fixtures, (fixture) => fixture.league_code))
-    .map(([code, rows]) => `${code}: ${rows.length}`)
-    .join(", ") || "none";
+    .map(([code, rows]) => `${code}: ${rows.length}`).join(", ") || "none";
+}
+
+async function preferredUclFeed({ supabase = null, days, pastDays = 0 } = {}) {
+  const attempts = [];
+  if (process.env.THESTATSAPI_KEY) {
+    try {
+      return supabase
+        ? await syncStatsApiUclFixtures(supabase, { days, pastDays })
+        : await fetchStatsApiUclFixtures({ days, pastDays });
+    } catch (error) {
+      attempts.push(`TheStatsAPI: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  if (process.env.FOOTBALL_DATA_ORG_API_KEY) {
+    try {
+      return supabase
+        ? await syncUclFixtures(supabase, { days, pastDays })
+        : await fetchUclFixtures({ days, pastDays });
+    } catch (error) {
+      attempts.push(`Football-Data.org: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  if (attempts.length) console.warn(`UCL providers unavailable. ${attempts.join(" | ")}`);
+  return null;
+}
+
+async function dryRun(days) {
+  const domestic = await fetchFixtureFeed({ days });
+  const ucl = await preferredUclFeed({ days });
+  const fixtures = [...domestic.fixtures, ...(ucl?.fixtures ?? []).filter((row) => row.status === "scheduled")];
+  console.log(`Validated ${fixtures.length} future supported fixtures for the next ${days} days.`);
+  console.log(`By competition: ${countsByLeague(fixtures)}`);
+  console.log(`Domestic source last modified: ${domestic.sourceLastModified ?? "not supplied"}`);
+  console.log(`Domestic source: ${domestic.url}`);
+  if (ucl) console.log(`UCL source: ${ucl.providerName} (${ucl.dateFrom} to ${ucl.dateTo})`);
+  else console.log("UCL source skipped: configure THESTATSAPI_KEY or FOOTBALL_DATA_ORG_API_KEY.");
 }
 
 async function main() {
   const args = argumentsOf(process.argv.slice(2));
   const days = positiveInteger(args.days, 14);
-  const dryRun = Boolean(args["dry-run"]);
-
-  if (dryRun) {
-    const feed = await fetchFixtureFeed({ days });
-    console.log(`Validated ${feed.fixtures.length} future supported fixtures for the next ${days} days.`);
-    console.log(`By league: ${countsByLeague(feed.fixtures)}`);
-    console.log(`Source last modified: ${feed.sourceLastModified ?? "not supplied"}`);
-    console.log(`Source: ${feed.url}`);
-    return;
-  }
+  if (args["dry-run"]) return dryRun(days);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -136,22 +159,48 @@ async function main() {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const feed = await syncFixtureFeed(supabase, { days });
-  const model = await activeModel(supabase);
-  const recentMatches = await fetchAllRecentMatches(supabase, model.trained_to);
-  const state = cloneModelState(model.artifact);
-  for (const match of sortMatchesChronologically(recentMatches)) updateModelWithResult(state, match);
+  const domesticFeed = await syncFixtureFeed(supabase, { days });
+  const uclFeed = await preferredUclFeed({ supabase, days, pastDays: 7 });
+  const models = await activeModels(supabase);
+  const states = new Map();
+  const applied = new Map();
+  for (const [modelKey, model] of models) {
+    const recent = await fetchAllRecentMatches(supabase, model.trained_to, modelKey);
+    const state = cloneModelState(model.artifact);
+    for (const match of sortMatchesChronologically(recent)) updateModelWithResult(state, match);
+    states.set(modelKey, state);
+    applied.set(modelKey, recent.length);
+  }
 
   const fixtures = await scheduledFixtures(supabase, days);
-  const rows = fixtures.map((fixture) => predictionRow(model, fixture, predictMatch(state, fixture)));
-  await upsertPredictions(supabase, rows);
-  const coldStarts = rows.filter((row) =>
-    Math.min(row.features.homeMatchesKnown, row.features.awayMatchesKnown) < 6).length;
+  const rows = [];
+  const skipped = [];
+  for (const fixture of fixtures) {
+    const modelKey = modelKeyForCompetition(fixture.league_code);
+    const model = models.get(modelKey);
+    const state = states.get(modelKey);
+    if (!model || !state) {
+      skipped.push(fixture);
+      continue;
+    }
+    rows.push(predictionRow(model, fixture, predictMatch(state, fixture)));
+  }
+  if (rows.length) await upsertPredictions(supabase, rows);
 
-  console.log(`Synced ${feed.fixtures.length} fixtures and ${feed.teams} team records.`);
-  console.log(`Generated ${rows.length} forecasts with active model v${model.version} (${model.algorithm}).`);
-  console.log(`Applied ${recentMatches.length} completed post-training matches to rolling form.`);
-  console.log(`Low-history fixtures: ${coldStarts}. By league: ${countsByLeague(fixtures)}`);
+  console.log(`Synced ${domesticFeed.fixtures.length} domestic fixtures and ${domesticFeed.teams} team records.`);
+  if (uclFeed) console.log(`Synced ${uclFeed.fixtures.length} UCL fixtures/results and ${uclFeed.teams} team records from ${uclFeed.providerName}.`);
+  else console.log("UCL sync skipped because neither preferred nor fallback provider is available.");
+  const forecasted = fixtures.filter((fixture) => !skipped.includes(fixture));
+  console.log(`Generated ${rows.length} competition-routed forecasts. By competition: ${countsByLeague(forecasted)}`);
+  for (const [modelKey, model] of models) {
+    console.log(`${modelFamilyForKey(modelKey).label}: v${model.version} (${model.algorithm}); ${applied.get(modelKey) ?? 0} post-training results applied.`);
+  }
+  if (skipped.length) {
+    const needsUcl = skipped.some((fixture) => modelKeyForCompetition(fixture.league_code) === UCL_MODEL_KEY);
+    console.warn(`Skipped ${skipped.length} fixtures without their specialist model.${needsUcl ? " Run npm run ai:ucl:train." : ""}`);
+  }
+  const coldStarts = rows.filter((row) => Math.min(row.features.homeMatchesKnown, row.features.awayMatchesKnown) < 6).length;
+  console.log(`Low-history forecasts: ${coldStarts}.`);
 }
 
 main().catch((error) => {

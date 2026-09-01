@@ -1,6 +1,6 @@
 {
   "name": "kickpulse-football-ai-hub",
-  "version": "1.6.0",
+  "version": "1.8.1",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -19,6 +19,12 @@
     "ai:train": "node --env-file-if-exists=.env.local scripts/football-ai/train-baseline.mjs",
     "ai:train:features": "node --env-file-if-exists=.env.local scripts/football-ai/train-baseline.mjs --persist-features",
     "ai:train:gated": "node --env-file-if-exists=.env.local scripts/football-ai/train-baseline.mjs --persist-features --min-new-matches=30 --promotion=auto",
+    "ai:ucl:import:dry": "node --env-file-if-exists=.env.local scripts/football-ai/import-ucl-history.mjs --dry-run",
+    "ai:ucl:import": "node --env-file-if-exists=.env.local scripts/football-ai/import-ucl-history.mjs",
+    "ai:ucl:enrich:sample": "node --env-file-if-exists=.env.local scripts/football-ai/import-thestatsapi.mjs --limit=25 --leagues=CL --resources=stats,odds",
+    "ai:ucl:enrich": "node --env-file-if-exists=.env.local scripts/football-ai/import-thestatsapi.mjs --leagues=CL --resources=stats,odds",
+    "ai:ucl:archive": "node --env-file-if-exists=.env.local scripts/football-ai/import-thestatsapi.mjs --leagues=CL --resources=player-stats,lineups,shotmap,timeline,referee",
+    "ai:ucl:train": "node --env-file-if-exists=.env.local scripts/football-ai/train-ucl.mjs",
     "ai:fixtures:dry": "node --env-file-if-exists=.env.local scripts/football-ai/sync-upcoming.mjs --dry-run",
     "ai:fixtures:sync": "node --env-file-if-exists=.env.local scripts/football-ai/sync-upcoming.mjs",
     "ai:fixtures:settle": "node --env-file-if-exists=.env.local scripts/football-ai/settle-predictions.mjs",

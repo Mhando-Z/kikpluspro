@@ -1,12 +1,13 @@
 import { pathToFileURL } from "node:url";
 import { createClient } from "@supabase/supabase-js";
-import { FOOTBALL_DATA_LEAGUES, canonicalTeamKey } from "../../lib/football-ai/constants.js";
+import { FOOTBALL_DATA_LEAGUES, UCL_COMPETITION_CODE } from "../../lib/football-ai/constants.js";
 import { createStatsApiClient } from "../../lib/thestatsapi/client.js";
 import {
   findLinkedAiMatch,
   leagueCodeForCompetition,
   normalizeMatchOdds,
   normalizeMatchStats,
+  providerTeamIdentity,
   providerMatchRow,
 } from "../../lib/thestatsapi/transform.js";
 
@@ -40,7 +41,7 @@ function requestedSeasons(args) {
 
 function requestedLeagues(args) {
   const leagues = csvValues(args.leagues, Object.keys(FOOTBALL_DATA_LEAGUES).join(",")).map((code) => code.toUpperCase());
-  const unknown = leagues.filter((code) => !FOOTBALL_DATA_LEAGUES[code]);
+  const unknown = leagues.filter((code) => !FOOTBALL_DATA_LEAGUES[code] && code !== UCL_COMPETITION_CODE);
   if (unknown.length) throw new Error(`Unknown league codes: ${unknown.join(", ")}`);
   return leagues;
 }
@@ -101,19 +102,24 @@ function mergeStoredEnrichment(current, patch) {
 }
 
 function providerTeams(providerMatches, leagueCode) {
-  const league = FOOTBALL_DATA_LEAGUES[leagueCode];
   const rows = new Map();
   for (const { source, linked } of providerMatches) {
     for (const side of ["home", "away"]) {
       const providerTeam = source[`${side}_team`];
-      const canonicalKey = linked?.[`${side}_team_key`] ?? canonicalTeamKey(league.countryCode, providerTeam.name);
+      const identity = providerTeamIdentity(providerTeam, leagueCode);
+      const canonicalKey = linked?.[`${side}_team_key`] ?? identity?.key;
+      if (!canonicalKey || !identity) continue;
       rows.set(String(providerTeam.id), {
         provider: SOURCE_KEY,
         provider_team_id: String(providerTeam.id),
         provider_name: providerTeam.name,
-        country_code: league.countryCode,
+        country_code: identity.countryCode,
         canonical_key: canonicalKey,
-        metadata: { leagueCode },
+        metadata: {
+          leagueCode,
+          associationCode: identity.associationCode,
+          logo: providerTeam.logo_url ?? providerTeam.logo ?? providerTeam.image_path ?? providerTeam.image ?? null,
+        },
       });
     }
   }
@@ -121,6 +127,7 @@ function providerTeams(providerMatches, leagueCode) {
 }
 
 async function persistProviderTeams(supabase, rows) {
+  if (!rows.length) return;
   const canonicalTeams = [...new Map(rows.map((row) => [row.canonical_key, {
     canonical_key: row.canonical_key,
     display_name: row.provider_name,
@@ -141,6 +148,13 @@ async function persistProviderTeams(supabase, rows) {
   })), "provider,country_code,provider_name");
 }
 
+export function selectEnrichmentMatches(providerMatches, { leagueCode, limit = Number.POSITIVE_INFINITY } = {}) {
+  const eligible = leagueCode === UCL_COMPETITION_CODE
+    ? providerMatches.filter((row) => row.linked)
+    : providerMatches;
+  return Number.isFinite(limit) ? eligible.slice(0, Math.max(0, limit)) : eligible;
+}
+
 async function importSeason({
   api,
   supabase,
@@ -153,32 +167,50 @@ async function importSeason({
   remainingLimit,
 }) {
   const existingMatches = await fetchExistingMatches(supabase, leagueCode, season.start_year);
-  let apiMatches = await api.paginate("/football/matches", {
+  const matchQuery = {
     competition_id: competition.id,
     season_id: season.id,
     status: "finished",
-    stage: "regular",
-  });
-  if (Number.isFinite(remainingLimit)) apiMatches = apiMatches.slice(0, Math.max(0, remainingLimit));
-
-  const providerMatches = apiMatches.map((source) => ({
+  };
+  if (leagueCode !== UCL_COMPETITION_CODE) matchQuery.stage = "regular";
+  const discoveredApiMatches = await api.paginate("/football/matches", matchQuery);
+  const discoveredProviderMatches = discoveredApiMatches.map((source) => ({
     source,
     linked: findLinkedAiMatch(source, existingMatches),
   }));
+  const providerMatches = selectEnrichmentMatches(discoveredProviderMatches, {
+    leagueCode,
+    limit: remainingLimit,
+  });
+  const apiMatches = providerMatches.map((row) => row.source);
+  const linkedAvailable = discoveredProviderMatches.filter((row) => row.linked).length;
   const matched = providerMatches.filter((row) => row.linked).length;
-  console.log(`${leagueCode} ${season.start_year}/${String(season.end_year).slice(-2)}: ${apiMatches.length} provider matches; ${matched} linked to training rows.`);
-  if (dryRun || !apiMatches.length) return { matches: apiMatches.length, linked: matched, payloads: 0, enrichments: 0 };
+  console.log(`${leagueCode} ${season.start_year}/${String(season.end_year).slice(-2)}: ${apiMatches.length} selected of ${discoveredApiMatches.length} provider matches; ${matched} linked to training rows (${linkedAvailable} linked available).`);
+  if (leagueCode === UCL_COMPETITION_CODE && discoveredProviderMatches.length > linkedAvailable) {
+    console.log(`  Skipping paid enrichment endpoints for ${discoveredProviderMatches.length - linkedAvailable} unlinked UCL rows.`);
+  }
+  if (dryRun) {
+    return { discovered: discoveredApiMatches.length, matches: apiMatches.length, linked: matched, payloads: 0, enrichments: 0 };
+  }
 
-  const teamRows = providerTeams(providerMatches, leagueCode);
+  // Provider/team metadata is inexpensive and remains useful for diagnosing
+  // aliases, but paid per-match resources are requested only for the selected
+  // rows above. For UCL this prevents qualifiers from consuming the trial.
+  const teamRows = providerTeams(discoveredProviderMatches, leagueCode);
   await persistProviderTeams(supabase, teamRows);
   const teamById = new Map(teamRows.map((row) => [row.provider_team_id, row]));
-  const matchRows = providerMatches.map(({ source, linked }) => {
+  const matchRows = discoveredProviderMatches.map(({ source, linked }) => {
     const row = providerMatchRow(source, { leagueCode, seasonStart: season.start_year, aiMatchId: linked?.id ?? null });
+    if (!row) return null;
     row.home_team_key = linked?.home_team_key ?? teamById.get(row.provider_home_team_id)?.canonical_key ?? null;
     row.away_team_key = linked?.away_team_key ?? teamById.get(row.provider_away_team_id)?.canonical_key ?? null;
     return row;
   }).filter(Boolean);
   await upsertBatches(supabase, "ai_provider_matches", matchRows, "provider_match_id");
+
+  if (!apiMatches.length) {
+    return { discovered: discoveredApiMatches.length, matches: 0, linked: 0, payloads: 0, enrichments: 0 };
+  }
 
   const ids = matchRows.map((row) => row.provider_match_id);
   const existingPayloadRows = refresh ? [] : await fetchRowsInBatches(
@@ -255,7 +287,13 @@ async function importSeason({
     return row;
   });
   await upsertBatches(supabase, "ai_match_enrichments", enrichmentRows, "provider_match_id");
-  return { matches: apiMatches.length, linked: matched, payloads: payloadRows.length, enrichments: enrichmentRows.length };
+  return {
+    discovered: discoveredApiMatches.length,
+    matches: apiMatches.length,
+    linked: matched,
+    payloads: payloadRows.length,
+    enrichments: enrichmentRows.length,
+  };
 }
 
 async function main() {
@@ -277,6 +315,7 @@ async function main() {
     apiKey,
     baseUrl: process.env.THESTATSAPI_BASE_URL,
     requestsPerMinute: process.env.THESTATSAPI_REQUESTS_PER_MINUTE ?? 220,
+    maxRequests: process.env.THESTATSAPI_MAX_REQUESTS_PER_RUN ?? 45_000,
   });
 
   let run = null;
@@ -291,13 +330,20 @@ async function main() {
     run = data;
   }
 
-  const totals = { matches: 0, linked: 0, payloads: 0, enrichments: 0, seasons: 0 };
+  const totals = { discovered: 0, matches: 0, linked: 0, payloads: 0, enrichments: 0, seasons: 0 };
   try {
-    const competitions = await api.paginate("/football/competitions", { type: "league" });
+    const competitions = await api.paginate("/football/competitions");
     const selectedCompetitions = new Map();
     for (const competition of competitions) {
       const code = leagueCodeForCompetition(competition);
       if (code && leagueCodes.includes(code)) selectedCompetitions.set(code, competition);
+    }
+    if (leagueCodes.includes(UCL_COMPETITION_CODE) && process.env.THESTATSAPI_UCL_COMPETITION_ID) {
+      selectedCompetitions.set(UCL_COMPETITION_CODE, competitions.find((competition) =>
+        String(competition.id) === String(process.env.THESTATSAPI_UCL_COMPETITION_ID)) ?? {
+        id: process.env.THESTATSAPI_UCL_COMPETITION_ID,
+        name: "UEFA Champions League",
+      });
     }
     const missing = leagueCodes.filter((code) => !selectedCompetitions.has(code));
     if (missing.length) throw new Error(`Could not discover competitions for: ${missing.join(", ")}`);
@@ -318,7 +364,7 @@ async function main() {
           dryRun,
           remainingLimit: Number.isFinite(limit) ? limit - totals.matches : Number.POSITIVE_INFINITY,
         });
-        for (const key of ["matches", "linked", "payloads", "enrichments"]) totals[key] += result[key];
+        for (const key of ["discovered", "matches", "linked", "payloads", "enrichments"]) totals[key] += result[key];
         totals.seasons += 1;
         if (totals.matches >= limit) break;
       }

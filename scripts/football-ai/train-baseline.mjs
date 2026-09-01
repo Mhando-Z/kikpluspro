@@ -60,6 +60,7 @@ async function activeModel(supabase) {
   const { data, error } = await supabase
     .from("ai_model_versions")
     .select("id,version,trained_to,metrics")
+    .eq("model_key", AI_MODEL_KEY)
     .eq("is_active", true)
     .eq("status", "ready")
     .order("version", { ascending: false })
