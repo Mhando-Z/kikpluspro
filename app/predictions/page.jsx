@@ -1,4 +1,5 @@
-import { BrainCircuit, Database, MousePointerClick, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { BrainCircuit, Database, MousePointerClick, Radio, ShieldCheck } from "lucide-react";
 import { PageIntro } from "@/components/football/FootballUI";
 import { AutomatedForecasts } from "@/components/football/AutomatedForecasts";
 
@@ -11,7 +12,12 @@ export default function PredictionsPage() {
         eyebrow="Automatic match intelligence"
         title="Every upcoming fixture, scored before kickoff."
         description="Open any forecast for the full probability report, expected goals, likely scorelines, model explanations and a private option to track the bet on this device."
-        actions={<span className="chip"><BrainCircuit className="size-3.5" /> Calibrated Elo + Poisson v2</span>}
+        actions={(
+          <div className="flex flex-wrap gap-2">
+            <span className="chip"><BrainCircuit className="size-3.5" /> Calibrated Elo + Poisson v2</span>
+            <Link className="button-secondary" href="/live"><Radio className="size-3.5 text-danger" /> Live scores</Link>
+          </div>
+        )}
       />
       <AutomatedForecasts />
       <section className="grid gap-4 md:grid-cols-3">

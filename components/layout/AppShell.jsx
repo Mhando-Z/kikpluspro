@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Menu,
   Moon,
+  Radio,
   Settings2,
   Sparkles,
   Sun,
@@ -22,12 +23,13 @@ import { useMemo, useState } from "react";
 const navigation = [
   { href: "/", label: "AI overview", icon: LayoutDashboard },
   { href: "/predictions", label: "Forecasts", icon: Sparkles },
+  { href: "/live", label: "Live scores", icon: Radio },
   { href: "/simulator", label: "Simulator", icon: FlaskConical },
   { href: "/tracker", label: "Bet tracker", icon: WalletCards },
   { href: "/admin", label: "Data control", icon: Settings2 },
 ];
 
-const legacyDataRoutes = ["/live", "/fixtures", "/standings", "/teams", "/players", "/insights", "/odds", "/explorer"];
+const legacyDataRoutes = ["/fixtures", "/standings", "/teams", "/players", "/insights", "/odds", "/explorer"];
 
 const leagueOptions = [
   { id: "39", label: "Premier League" },
@@ -201,6 +203,8 @@ function Topbar({ onMenu }) {
     ? "Live model performance"
     : pathname.startsWith("/predictions")
       ? "Automatic fixture forecasts"
+      : pathname.startsWith("/live")
+        ? "Live scores without prediction leakage"
       : pathname.startsWith("/simulator")
         ? "Manual probability laboratory"
         : pathname.startsWith("/tracker")

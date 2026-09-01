@@ -30,7 +30,7 @@ ready to use real football data.
 - Full automatic-forecast reports opened directly from match cards
 - Private IndexedDB bet tracker with stake, odds, profit/loss, ROI and JSON export
 - Separate automatic forecast, manual simulator and tracker routes
-- Live score center with Supabase Realtime updates
+- Live score center using the official free LiveXscores widget embedded by Football-Data
 - Upcoming fixtures and recent results
 - League standings and form guide
 - Team and venue directory
@@ -47,10 +47,28 @@ ready to use real football data.
 - Dark and light themes
 - Mobile navigation and accessible reduced-motion behavior
 
-The main navigation is intentionally focused on `/`, `/predictions`,
+The main navigation is intentionally focused on `/`, `/predictions`, `/live`,
 `/simulator`, `/tracker` and `/admin`. The API-Football pages remain available
-by direct URL for later reuse, but live scores, fixtures, standings, teams,
+by direct URL for later reuse, but fixtures, standings, teams,
 players, insights, odds and the endpoint explorer are hidden from navigation.
+
+## Live scores and prediction settlement
+
+`/live` uses the free embed documented at
+https://www.livexscores.com/free-livescore, which is the same provider embedded
+by https://livescore.football-data.co.uk/. It offers All matches, In play, Not
+started and Finished views and does not consume API-Football quota.
+
+The widget is display-only. LiveXscores advertises structured data as a paid
+feed, so KickPulse does not scrape or reverse-engineer the widget. Completed
+predictions continue to be settled from Football-Data's season CSVs:
+
+~~~bash
+npm run ai:fixtures:settle
+~~~
+
+This separation keeps the original pre-match probabilities immutable and makes
+the model's correct/incorrect scorecard auditable.
 
 ## Endpoint coverage
 
