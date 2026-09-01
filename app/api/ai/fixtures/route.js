@@ -60,8 +60,8 @@ function predictionPayload(prediction, model) {
 }
 
 function fixturePayload(fixture, prediction, resolveTeamAsset) {
-  const homeAsset = resolveTeamAsset?.({ name: fixture.home_team_name, countryCode: fixture.country_code });
-  const awayAsset = resolveTeamAsset?.({ name: fixture.away_team_name, countryCode: fixture.country_code });
+  const homeAsset = resolveTeamAsset?.({ canonicalKey: fixture.home_team_key, name: fixture.home_team_name, countryCode: fixture.country_code });
+  const awayAsset = resolveTeamAsset?.({ canonicalKey: fixture.away_team_key, name: fixture.away_team_name, countryCode: fixture.country_code });
   return {
     id: fixture.id,
     sourceKey: fixture.source_key,

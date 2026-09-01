@@ -66,8 +66,8 @@ export async function GET() {
       const fixture = fixtureById.get(prediction.fixture_id);
       if (!fixture) return [];
       const pick = pickForPrediction(prediction);
-      const homeAsset = resolveTeamAsset({ name: fixture.home_team_name, countryCode: fixture.country_code });
-      const awayAsset = resolveTeamAsset({ name: fixture.away_team_name, countryCode: fixture.country_code });
+      const homeAsset = resolveTeamAsset({ canonicalKey: prediction.home_team_key, name: fixture.home_team_name, countryCode: fixture.country_code });
+      const awayAsset = resolveTeamAsset({ canonicalKey: prediction.away_team_key, name: fixture.away_team_name, countryCode: fixture.country_code });
       const model = modelById.get(prediction.model_version_id);
       return [{
         id: prediction.id,

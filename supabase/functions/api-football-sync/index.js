@@ -38,8 +38,21 @@ async function sha256(value) {
 
 async function upsertRows(supabase, table, rows, onConflict) {
   if (!rows.length) return 0;
+  const conflictColumns = String(onConflict)
+    .split(",")
+    .map((column) => column.trim())
+    .filter(Boolean);
+  const uniqueRows = [...rows.reduce((byConflictKey, row) => {
+    const key = conflictColumns
+      .map((column) => JSON.stringify(row[column] ?? null))
+      .join("|");
+    // Keep the latest representation when an API response repeats an entity,
+    // such as multiple teams sharing the same venue.
+    byConflictKey.set(key, row);
+    return byConflictKey;
+  }, new Map()).values()];
   let written = 0;
-  for (const batch of chunks(rows)) {
+  for (const batch of chunks(uniqueRows)) {
     const { error } = await supabase.from(table).upsert(batch, { onConflict });
     if (error) throw new Error(`${table} normalization failed: ${error.message}`);
     written += batch.length;
@@ -104,14 +117,16 @@ async function normalizeTeams(supabase, response, timestamp) {
       payload: entry.venue,
     }));
   const venueCount = await upsertRows(supabase, "venues", venues, "api_id");
-  const teams = response.map((entry) => ({
+  const teams = response.filter((entry) => entry.team?.id).map((entry) => ({
     api_id: entry.team.id,
     name: entry.team.name,
     code: entry.team.code,
     country: entry.team.country,
     founded: entry.team.founded,
     is_national: Boolean(entry.team.national),
-    logo_url: entry.team.logo,
+    // API-Football documents team IDs as stable. Canonicalizing the hostname
+    // avoids media-1/media-2 host allowlist failures in Next Image.
+    logo_url: `https://media.api-sports.io/football/teams/${entry.team.id}.png`,
     venue_api_id: entry.venue?.id ?? null,
     payload: entry,
     source_updated_at: timestamp,
@@ -254,6 +269,8 @@ function apiErrors(payload) {
 
 async function runJob({ supabase, apiKey, input, job = null }) {
   const started = Date.now();
+  let receivedBeforeFailure = 0;
+  let httpStatusBeforeFailure = null;
   const definition = resolveEndpoint(input.endpoint ?? input.endpointId ?? job?.endpoint_id ?? job?.endpoint);
   if (!definition) throw new Error("Endpoint is not in the API-Football allowlist.");
 
@@ -296,6 +313,7 @@ async function runJob({ supabase, apiKey, input, job = null }) {
     const query = new URLSearchParams(params);
     const url = `${API_BASE_URL}${definition.path}${query.size ? `?${query}` : ""}`;
     const response = await fetch(url, { headers: { "x-apisports-key": apiKey } });
+    httpStatusBeforeFailure = response.status;
     const payload = await response.json();
     const upstreamErrors = apiErrors(payload);
     if (!response.ok || upstreamErrors.length) {
@@ -303,6 +321,7 @@ async function runJob({ supabase, apiKey, input, job = null }) {
     }
 
     const records = Array.isArray(payload.response) ? payload.response : [];
+    receivedBeforeFailure = records.length;
     const rateLimitRemaining = integerHeader(response.headers, "x-ratelimit-remaining");
     const dailyRemaining = integerHeader(response.headers, "x-ratelimit-requests-remaining");
     const now = new Date().toISOString();
@@ -391,6 +410,8 @@ async function runJob({ supabase, apiKey, input, job = null }) {
     const now = new Date().toISOString();
     await supabase.from("sync_runs").update({
       status: "failed",
+      records_received: receivedBeforeFailure,
+      http_status: httpStatusBeforeFailure,
       error_message: message,
       completed_at: now,
       duration_ms: Date.now() - started,
@@ -465,4 +486,3 @@ Deno.serve(async (request) => {
     return json({ error: error instanceof Error ? error.message : String(error) }, 400);
   }
 });
-

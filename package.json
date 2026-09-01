@@ -1,6 +1,6 @@
 {
   "name": "kickpulse-football-ai-hub",
-  "version": "1.8.1",
+  "version": "1.9.2",
   "private": true,
   "engines": {
     "node": ">=22.13.0"

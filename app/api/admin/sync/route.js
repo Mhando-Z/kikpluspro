@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { reconcileCachedTeamAssets, TEAM_ASSET_SYNC_JOBS } from "@/lib/api-football/team-assets";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,10 @@ export async function POST(request) {
   }
 
   const body = await request.json();
+  const isTeamAssetSync = body.mode === "team-assets";
+  const upstreamBody = isTeamAssetSync
+    ? { jobs: TEAM_ASSET_SYNC_JOBS.map(({ endpoint, params, force }) => ({ endpoint, params, force })) }
+    : body;
   const headers = {
     "content-type": "application/json",
     "x-sync-secret": syncSecret,
@@ -36,10 +42,29 @@ export async function POST(request) {
     const response = await fetch(functionUrl, {
       method: "POST",
       headers,
-      body: JSON.stringify(body),
+      body: JSON.stringify(upstreamBody),
       cache: "no-store",
     });
     const result = await response.json();
+    if (isTeamAssetSync && response.ok) {
+      const supabase = createServerSupabaseClient({ serviceRole: true });
+      if (!supabase) {
+        return NextResponse.json({
+          ...result,
+          error: "The API-Football catalog synced, but Supabase service-role credentials are missing for reconciliation.",
+        }, { status: 503 });
+      }
+      try {
+        const teamAssets = await reconcileCachedTeamAssets(supabase);
+        return NextResponse.json({ ...result, teamAssets });
+      } catch (error) {
+        return NextResponse.json({
+          ...result,
+          error: error instanceof Error ? error.message : "Team catalog synced but reconciliation failed.",
+          setupRequired: true,
+        }, { status: 503 });
+      }
+    }
     return NextResponse.json(result, { status: response.status });
   } catch (error) {
     return NextResponse.json(
@@ -48,4 +73,3 @@ export async function POST(request) {
     );
   }
 }
-

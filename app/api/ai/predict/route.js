@@ -51,8 +51,8 @@ export async function POST(request) {
 
     const assetClient = createServerSupabaseClient({ serviceRole: true });
     const resolveTeamAsset = await loadCachedTeamAssetResolver(assetClient);
-    const homeAsset = resolveTeamAsset({ name: prediction.homeTeam.name, countryCode: expectedCountry });
-    const awayAsset = resolveTeamAsset({ name: prediction.awayTeam.name, countryCode: expectedCountry });
+    const homeAsset = resolveTeamAsset({ canonicalKey: prediction.homeTeam.key, name: prediction.homeTeam.name, countryCode: expectedCountry });
+    const awayAsset = resolveTeamAsset({ canonicalKey: prediction.awayTeam.key, name: prediction.awayTeam.name, countryCode: expectedCountry });
     prediction.homeTeam.logo = homeAsset?.logo ?? null;
     prediction.homeTeam.apiFootballId = homeAsset?.apiFootballId ?? null;
     prediction.awayTeam.logo = awayAsset?.logo ?? null;

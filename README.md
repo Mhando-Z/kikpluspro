@@ -163,6 +163,7 @@ supabase/migrations/202608300002_prediction_tracking.sql
 supabase/migrations/202608310001_sustainable_learning.sql
 supabase/migrations/202609010001_ucl_specialist.sql
 supabase/migrations/202609010002_thestatsapi_ucl.sql
+supabase/migrations/202609010003_team_assets.sql
 ~~~
 
 Then run supabase/seed.sql.
@@ -390,28 +391,43 @@ KickPulse renders the team logos returned by API-Football and uses the
 provider's documented team-ID media URL as a fallback. The frontend never sends
 an API key and loading a cached logo does not make another statistics request.
 
-Open `/admin`, enter `ADMIN_SYNC_KEY`, and click **Sync team logos**. The shortcut
-runs five `/teams` requests for the supported league IDs using season 2024:
+Apply `supabase/migrations/202609010003_team_assets.sql`, redeploy the included
+Edge Function, then open `/admin`, enter `ADMIN_SYNC_KEY`, and click
+**Sync team assets**. The shortcut runs five season-free country catalog calls:
 
 ~~~text
-39   Premier League
-140  La Liga
-135  Serie A
-78   Bundesliga
-61   Ligue 1
+England
+Spain
+Italy
+Germany
+France
 ~~~
 
-This normally consumes five API requests and stores the resulting team IDs,
-names and logo URLs in Supabase. The AI fixture source uses shorter team names,
-so a country-safe resolver bridges names such as `Man United`, `Ath Madrid`,
-`Paris SG` and `Nott'm Forest` to the corresponding API-Football asset. An
-unmatched or unavailable crest falls back to the club initials instead of a
-broken image.
+It also makes one `/teams?league=2&season=2024` request to cover the Champions
+League catalog available to the free API-Football plan. The normal full run is
+therefore six API requests. Country catalogs include promoted and lower-division
+clubs without depending on a current-season subscription.
+
+After importing the catalog, the server reconciles each API-Football ID to the
+canonical `ai_teams` identity by country and normalized name. Exact canonical
+links are used first on every forecast; fuzzy name resolution remains a safe
+fallback. `/admin` shows catalog size, linked coverage and the first unresolved
+teams. Use **Reconcile cached assets** to repeat matching without spending API
+quota. An unavailable crest falls back to the club initials.
 
 Team crests now appear on the dashboard, fixtures, standings, player lists,
 club directory, API-Football prediction panels and the separate AI forecast
 workspace. Use the images for team identification and descriptive presentation
 in line with the provider's current terms.
+
+This sync is intentionally manual. Team identity data changes slowly, so run it
+after adding a competition, seeing an unresolved team, or at most monthly. It is
+separate from model training and the logo fields never enter prediction features.
+
+The v1.9.1 worker deduplicates normalized rows by their database conflict key
+before each upsert. This is required for country and cup catalogs where multiple
+teams can share one venue. Without it, PostgreSQL rejects the entire response
+with `ON CONFLICT DO UPDATE command cannot affect row a second time`.
 
 ## 10. Schedule API-Football synchronization
 
