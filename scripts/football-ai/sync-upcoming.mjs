@@ -120,7 +120,7 @@ async function main() {
 
   if (dryRun) {
     const feed = await fetchFixtureFeed({ days });
-    console.log(`Validated ${feed.fixtures.length} supported fixtures for the next ${days} days.`);
+    console.log(`Validated ${feed.fixtures.length} future supported fixtures for the next ${days} days.`);
     console.log(`By league: ${countsByLeague(feed.fixtures)}`);
     console.log(`Source last modified: ${feed.sourceLastModified ?? "not supplied"}`);
     console.log(`Source: ${feed.url}`);

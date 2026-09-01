@@ -1,6 +1,6 @@
 # KickPulse model card
 
-## Model identity
+## Recorded production benchmark
 
 - Model key: `elo-poisson-global`
 - Algorithm: `elo-poisson-temperature-v2`
@@ -8,6 +8,12 @@
 - Output: home win, draw, away win, expected goals, over 2.5, both teams to score, and likely scorelines
 - Intended use: football analysis, comparison and product experimentation
 - Excluded use: guaranteed outcomes or automatic betting instructions
+
+The recorded metrics below belong to version 2. Version 3 is an
+`elo-poisson-hybrid-performance-v3` candidate that can use archived historical
+xG while retaining a goals-only fallback. It must pass the chronological
+promotion gate before replacing this benchmark; no version 3 metric is claimed
+until that training run completes.
 
 ## Training data
 
@@ -67,4 +73,3 @@ The global validation temperature is 1.70, indicating that the original outcome 
 ## Release rule
 
 Keep the previous active model until a candidate completes chronological evaluation. Promote a new algorithm only when probability quality improves on later data without introducing leakage, and record the full split and metrics with the version.
-

@@ -9,6 +9,7 @@ KickPulse is a production-style football intelligence starter built with:
 - Supabase PostgreSQL, Realtime and Edge Functions
 - API-Football v3
 - A calibrated JavaScript Elo + Poisson prediction pipeline
+- Temporary TheStatsAPI historical enrichment with no production dependency
 
 It stores API-Football responses in Supabase before serving them to the Next.js
 application. One backend request can therefore supply every connected user.
@@ -138,6 +139,7 @@ Or copy these migrations into the Supabase SQL Editor in this order:
 supabase/migrations/202608290001_kickpulse_schema.sql
 supabase/migrations/202608300001_football_ai.sql
 supabase/migrations/202608300002_prediction_tracking.sql
+supabase/migrations/202608310001_sustainable_learning.sql
 ~~~
 
 Then run supabase/seed.sql.
@@ -173,6 +175,9 @@ NEXT_PUBLIC_DEFAULT_LEAGUE_ID=39
 NEXT_PUBLIC_DEFAULT_SEASON=2024
 FOOTBALL_DATA_BASE_URL=https://www.football-data.co.uk/mmz4281
 FOOTBALL_DATA_FIXTURES_URL=https://www.football-data.co.uk/fixtures.csv
+THESTATSAPI_KEY=YOUR_SERVER_ONLY_TRIAL_KEY
+THESTATSAPI_BASE_URL=https://api.thestatsapi.com/api
+THESTATSAPI_REQUESTS_PER_MINUTE=220
 AI_AUDIT_PREDICTIONS=false
 ~~~
 
@@ -241,7 +246,14 @@ The trainer uses seasons in chronological order: older seasons for training,
 the penultimate season for probability calibration, and the latest season for
 walk-forward testing. It reports calibrated and uncalibrated accuracy, log
 loss, Brier score, goal error, per-league results and a market benchmark where
-closing odds exist. A completed run stores and activates a new model version.
+closing odds exist. A completed run stores a new model version and promotes it
+only when the chronological probability-quality gate passes.
+
+Before the temporary provider trial ends, follow
+[docs/THESTATSAPI_TRIAL.md](docs/THESTATSAPI_TRIAL.md). The enrichment importer
+stores raw payloads and links match xG/statistics to the existing historical
+rows. The deployed hybrid model falls back to goal-derived performance after
+the trial and therefore does not need a permanent API subscription.
 
 To persist every pre-match feature snapshot for later XGBoost or LightGBM work:
 

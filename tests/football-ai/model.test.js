@@ -94,6 +94,21 @@ test("Elo moves toward the winning team after a result", () => {
   assert.ok(state.teams[result.away_team_key].elo < 1500);
 });
 
+test("xG creates a less noisy performance signal with a goals-only fallback", () => {
+  const state = createModelState({ xgPerformanceWeight: 0.65 });
+  const enriched = match(0, "Arsenal", "Chelsea", 3, 0);
+  enriched.home_npxg = 1;
+  enriched.away_npxg = 0.2;
+  updateModelWithResult(state, enriched);
+  assert.ok(Math.abs(state.teams[enriched.home_team_key].home.performanceFor - 1.7) < 1e-12);
+
+  const freeOnly = match(1, "Arsenal", "Everton", 2, 1);
+  freeOnly.home_xg = null;
+  freeOnly.away_xg = null;
+  updateModelWithResult(state, freeOnly);
+  assert.ok(Math.abs(state.teams[freeOnly.home_team_key].home.performanceFor - 3.7) < 1e-12);
+});
+
 test("temperature scaling keeps a normalized probability distribution", () => {
   const scaled = applyTemperature([0.72, 0.18, 0.1], 1.4);
   assert.ok(Math.abs(scaled.reduce((sum, value) => sum + value, 0) - 1) < 1e-12);

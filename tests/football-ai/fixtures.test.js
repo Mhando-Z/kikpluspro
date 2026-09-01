@@ -37,3 +37,19 @@ test("fixture feed keeps supported leagues, dates and market prices", () => {
   assert.equal(fixtures[0].over_25_odds, 1.92);
   assert.match(fixtures[0].source_fixture_key, /arsenal.*chelsea/);
 });
+
+test("fixture feed excludes fixtures that kicked off earlier today", () => {
+  const csv = [
+    "Div,Date,Time,HomeTeam,AwayTeam,AvgCH,AvgCD,AvgCA",
+    "E0,30/08/2026,16:30,Arsenal,Chelsea,1.80,3.60,4.70",
+    "SP1,30/08/2026,21:00,Barcelona,Valencia,1.30,5.50,9.00",
+  ].join("\n");
+  const fixtures = parseFixtureFeed(csv, {
+    now: new Date("2026-08-30T18:00:00Z"),
+    days: 14,
+  });
+
+  assert.equal(fixtures.length, 1);
+  assert.equal(fixtures[0].league_code, "SP1");
+  assert.equal(fixtures[0].kickoff_at, "2026-08-30T20:00:00.000Z");
+});

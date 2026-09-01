@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The production model estimates match-result and score probabilities without depending on paid current-season API-Football access. It uses public completed-match CSVs from Football-Data.co.uk, stores them in Supabase, and trains entirely in JavaScript.
+The production model estimates match-result and score probabilities without depending on a paid current-season API. It uses public completed-match CSVs from Football-Data.co.uk, optionally enriches historical rows during a temporary TheStatsAPI trial, stores them in Supabase, and trains entirely in JavaScript.
 
 This is a probabilistic analytical product. It does not guarantee an outcome and must not be described as certain betting advice.
 
@@ -10,15 +10,17 @@ This is a probabilistic analytical product. It does not guarantee an outcome and
 
 1. `scripts/football-ai/import-football-data.mjs` downloads selected league-season CSVs directly from the source and upserts normalized matches into Supabase.
 2. `scripts/football-ai/train-baseline.mjs` loads matches in chronological order, splits them by season, evaluates the model, and activates a versioned artifact.
-3. `app/api/ai/model/route.js` exposes safe model metadata and supported teams.
-4. `app/api/ai/predict/route.js` loads the active server-side artifact and calculates a forecast. Optional auditing records the input features and output.
-5. `scripts/football-ai/sync-upcoming.mjs` imports the public current-fixture feed, reconstructs post-training form, and stores one automatic forecast per active-model fixture.
-6. `scripts/football-ai/settle-predictions.mjs` imports published final scores, settles stored forecasts, and makes the new matches available to later prediction runs.
-7. `app/api/ai/fixtures/route.js` exposes upcoming forecasts and calculated live performance without exposing the model artifact.
-8. `app/api/ai/performance/route.js` aggregates every active-model prediction into correct, incorrect, pending, per-league, confidence and monthly metrics.
-9. `app/api/ai/results/route.js` safely resolves saved fixture IDs so the browser-only tracker can settle local records.
-10. `app/predictions/page.jsx` renders automatic forecasts and full report dialogs; `app/simulator/page.jsx` contains the manual prediction lab.
-11. `app/tracker/page.jsx` keeps user-entered decisions in IndexedDB rather than Supabase.
+3. `scripts/football-ai/import-thestatsapi.mjs` temporarily archives advanced historical payloads and links normalized xG/statistics to matching Football-Data rows.
+4. `app/api/ai/model/route.js` exposes safe model metadata and supported teams.
+5. `app/api/ai/predict/route.js` loads the active server-side artifact and calculates a forecast. Optional auditing records the input features and output.
+6. `scripts/football-ai/refresh-current-results.mjs` imports every completed current-season match so learning does not depend on whether a fixture was previously tracked.
+7. `scripts/football-ai/sync-upcoming.mjs` imports the public current-fixture feed, reconstructs post-training form, and stores one automatic forecast per active-model fixture.
+8. `scripts/football-ai/settle-predictions.mjs` imports published final scores, settles stored forecasts, and makes the new matches available to later prediction runs.
+9. `app/api/ai/fixtures/route.js` exposes upcoming forecasts and calculated live performance without exposing the model artifact.
+10. `app/api/ai/performance/route.js` aggregates every active-model prediction into correct, incorrect, pending, per-league, confidence and monthly metrics.
+11. `app/api/ai/results/route.js` safely resolves saved fixture IDs so the browser-only tracker can settle local records.
+12. `app/predictions/page.jsx` renders automatic forecasts and full report dialogs; `app/simulator/page.jsx` contains the manual prediction lab.
+13. `app/tracker/page.jsx` keeps user-entered decisions in IndexedDB rather than Supabase.
 
 API-Football remains the visual identity source. The AI routes read cached rows
 from the normalized `teams` table and resolve Football-Data names to an
@@ -43,11 +45,12 @@ Rows include the final result, goals, shots, shots on target, disciplinary stati
 
 ## Calibrated model
 
-The model combines:
+The version 3 candidate combines:
 
 - Dynamic team Elo ratings with a home advantage and post-match updates.
 - Home/away attacking and defensive goal rates with Bayesian shrinkage toward league averages.
 - Five-match goal form.
+- A hybrid performance signal that blends historical npxG/xG with goals and automatically falls back to goals when future xG is unavailable.
 - A Poisson score matrix from 0–0 through 8–8.
 
 The score matrix produces:
@@ -97,7 +100,7 @@ npm run ai:fixtures:update
 
 Use `--validation-season=2024 --test-season=2025` with either training command to choose explicit splits. The season value means the starting year: `2025` is the 2025/26 campaign.
 
-Re-running an import is safe because every source match has a deterministic unique key. Each training run creates a new immutable version and activates it only after the artifact has been stored successfully.
+Re-running either importer is safe because source identifiers are deterministic and TheStatsAPI payloads are skipped once archived. Each training run creates a new immutable version. Automatic promotion occurs only when held-out log loss improves without a material Brier-score regression.
 
 Set `AI_AUDIT_PREDICTIONS=true` only when you intentionally want to store public simulator requests. It defaults to `false`; add authentication or durable rate limiting before enabling it on a public deployment.
 

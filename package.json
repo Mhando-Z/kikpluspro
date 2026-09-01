@@ -1,6 +1,6 @@
 {
   "name": "kickpulse-football-ai-hub",
-  "version": "1.4.0",
+  "version": "1.5.4",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -12,14 +12,20 @@
     "lint": "eslint app components/AppProviders.jsx components/football components/layout lib scripts tests --ignore-pattern .next",
     "test": "node --test",
     "check": "npm run lint && npm test && npm run build",
-    "ai:import": "node --env-file=.env.local scripts/football-ai/import-football-data.mjs",
+    "ai:import": "node --env-file-if-exists=.env.local scripts/football-ai/import-football-data.mjs",
     "ai:import:dry": "node --env-file-if-exists=.env.local scripts/football-ai/import-football-data.mjs --dry-run",
-    "ai:train": "node --env-file=.env.local scripts/football-ai/train-baseline.mjs",
-    "ai:train:features": "node --env-file=.env.local scripts/football-ai/train-baseline.mjs --persist-features",
+    "ai:enrich": "node --env-file-if-exists=.env.local scripts/football-ai/import-thestatsapi.mjs",
+    "ai:enrich:sample": "node --env-file-if-exists=.env.local scripts/football-ai/import-thestatsapi.mjs --limit=25 --resources=stats,odds",
+    "ai:train": "node --env-file-if-exists=.env.local scripts/football-ai/train-baseline.mjs",
+    "ai:train:features": "node --env-file-if-exists=.env.local scripts/football-ai/train-baseline.mjs --persist-features",
+    "ai:train:gated": "node --env-file-if-exists=.env.local scripts/football-ai/train-baseline.mjs --persist-features --min-new-matches=30 --promotion=auto",
     "ai:fixtures:dry": "node --env-file-if-exists=.env.local scripts/football-ai/sync-upcoming.mjs --dry-run",
-    "ai:fixtures:sync": "node --env-file=.env.local scripts/football-ai/sync-upcoming.mjs",
-    "ai:fixtures:settle": "node --env-file=.env.local scripts/football-ai/settle-predictions.mjs",
+    "ai:fixtures:sync": "node --env-file-if-exists=.env.local scripts/football-ai/sync-upcoming.mjs",
+    "ai:fixtures:settle": "node --env-file-if-exists=.env.local scripts/football-ai/settle-predictions.mjs",
+    "ai:results:refresh": "node --env-file-if-exists=.env.local scripts/football-ai/refresh-current-results.mjs",
     "ai:fixtures:update": "npm run ai:fixtures:settle && npm run ai:fixtures:sync",
+    "ai:learn:daily": "npm run ai:fixtures:settle && npm run ai:results:refresh && npm run ai:fixtures:sync",
+    "ai:learn:weekly": "npm run ai:fixtures:update && npm run ai:train:gated",
     "supabase:start": "supabase start",
     "supabase:reset": "supabase db reset",
     "supabase:functions": "supabase functions serve api-football-sync --no-verify-jwt"

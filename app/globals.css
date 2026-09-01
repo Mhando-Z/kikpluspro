@@ -56,8 +56,7 @@
   --color-accent-soft: var(--accent-soft);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
-  --font-sans:
-    "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
@@ -77,20 +76,11 @@ html.dark {
 body {
   min-height: 100vh;
   background:
-    radial-gradient(
-      circle at 12% 4%,
-      color-mix(in srgb, var(--brand) 10%, transparent),
-      transparent 25rem
-    ),
-    radial-gradient(
-      circle at 88% 8%,
-      color-mix(in srgb, var(--accent) 8%, transparent),
-      transparent 24rem
-    ),
+    radial-gradient(circle at 12% 4%, color-mix(in srgb, var(--brand) 10%, transparent), transparent 25rem),
+    radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 24rem),
     var(--canvas);
   color: var(--ink);
-  font-family:
-    "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
   text-rendering: optimizeLegibility;
 }
 
@@ -118,7 +108,7 @@ select:focus-visible {
   color: #04100c;
 }
 
-/* ::-webkit-scrollbar {
+::-webkit-scrollbar {
   height: 8px;
   width: 8px;
 }
@@ -130,7 +120,7 @@ select:focus-visible {
 ::-webkit-scrollbar-thumb {
   background: var(--surface-strong);
   border-radius: 999px;
-} */
+}
 
 .surface-panel {
   border: 1px solid var(--line);
@@ -162,11 +152,7 @@ select:focus-visible {
   padding: 0.65rem 1rem;
   font-size: 0.875rem;
   font-weight: 700;
-  transition:
-    transform 180ms ease,
-    background 180ms ease,
-    color 180ms ease,
-    border-color 180ms ease;
+  transition: transform 180ms ease, background 180ms ease, color 180ms ease, border-color 180ms ease;
 }
 
 .button-primary {
@@ -302,14 +288,8 @@ select:focus-visible {
 }
 
 @keyframes live-ping {
-  from {
-    opacity: 0.75;
-    transform: scale(0.7);
-  }
-  to {
-    opacity: 0;
-    transform: scale(1.6);
-  }
+  from { opacity: 0.75; transform: scale(0.7); }
+  to { opacity: 0; transform: scale(1.6); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -323,19 +303,3 @@ select:focus-visible {
   }
 }
 
-::-webkit-scrollbar {
-  display: "none";
-}
-::-webkit-scrollbar {
-  width: 0;
-}
-
-::-webkit-scrollbar-track {
-  background: none;
-}
-
-::-webkit-scrollbar-thumb {
-  background-color:;
-  border-radius: 0px;
-  border: 0px;
-}
