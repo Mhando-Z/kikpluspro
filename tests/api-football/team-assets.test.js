@@ -20,13 +20,19 @@ const teams = [
 
 test("team names normalize punctuation and accents", () => {
   assert.equal(normalizeTeamName("Bayern München"), "bayern munchen");
+  assert.equal(normalizeTeamName("Bodø/Glimt"), "bodo glimt");
   assert.equal(normalizeTeamName("Nott'm Forest"), "nott m forest");
 });
 
 test("Football-Data aliases match API-Football team names", () => {
   assert.equal(teamNameMatchScore("Man United", "Manchester United"), 1);
   assert.equal(teamNameMatchScore("Ath Madrid", "Atletico Madrid"), 1);
+  assert.equal(teamNameMatchScore("Celta", "Celta Vigo"), 1);
+  assert.equal(teamNameMatchScore("La Coruna", "Deportivo La Coruna"), 1);
   assert.equal(teamNameMatchScore("Milan", "AC Milan"), 1);
+  assert.equal(teamNameMatchScore("QPR", "Queens Park Rangers"), 1);
+  assert.equal(teamNameMatchScore("St Gilloise", "Union Saint-Gilloise"), 1);
+  assert.equal(teamNameMatchScore("Heart of Midlothian", "Hearts"), 1);
 });
 
 test("resolver returns a country-safe cached API-Football asset", () => {
@@ -89,9 +95,31 @@ test("reconciliation reserves an existing API-Football id before matching duplic
   assert.equal(outcome.matches.length, 1);
   assert.equal(outcome.matches[0].canonicalKey, "football-data:spain:ath-madrid");
   assert.equal(outcome.matches[0].method, "existing-link");
-  assert.equal(outcome.unresolved.length, 1);
-  assert.equal(outcome.unresolved[0].canonicalKey, "uefa:spain:atletico-madrid");
-  assert.equal(outcome.unresolved[0].reason, "api-team-already-linked");
+  assert.equal(outcome.inherited.length, 1);
+  assert.equal(outcome.inherited[0].canonicalKey, "uefa:spain:atletico-madrid");
+  assert.equal(outcome.inherited[0].sourceApiFootballId, 530);
+  assert.equal(outcome.inherited[0].method, "alias-inheritance");
+  assert.equal(outcome.unresolved.length, 0);
+});
+
+test("UCL country hints prevent generic Europe rows from matching clubs in the wrong country", () => {
+  const outcome = matchTeamAssets([
+    { canonical_key: "uefa:europe:aek-athens", display_name: "AEK Athens", country_code: "europe" },
+    { canonical_key: "uefa:europe:bod-glimt", display_name: "Bodø/Glimt", country_code: "europe" },
+    { canonical_key: "uefa:europe:viking-fk", display_name: "Viking FK", country_code: "europe" },
+  ], [
+    { api_id: 22607, name: "AEK Boco", country: "England", logo_url: null },
+    { api_id: 120, name: "AEK Athens", country: "Greece", logo_url: null },
+    { api_id: 327, name: "Bodo/Glimt", country: "Norway", logo_url: null },
+    { api_id: 278, name: "Vikingur Reykjavik", country: "Iceland", logo_url: null },
+    { api_id: 999, name: "Viking", country: "Norway", logo_url: null },
+  ]);
+
+  assert.deepEqual(
+    outcome.matches.map((match) => match.apiFootballId).sort((left, right) => left - right),
+    [120, 327, 999],
+  );
+  assert.equal(outcome.unresolved.length, 0);
 });
 
 test("logo CDN URLs are derived only from numeric API team ids", () => {

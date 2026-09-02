@@ -18,12 +18,14 @@ const providerMatch = {
   score: { home: 2, away: 1 },
 };
 
-test("competition discovery maps only supported top leagues", () => {
+test("competition discovery maps every supported domestic league", () => {
   assert.equal(leagueCodeForCompetition({ name: "Premier League", country: "England" }), "E0");
+  assert.equal(leagueCodeForCompetition({ id: "comp_8321", name: "EFL Championship", country: "England" }), "E1");
   assert.equal(leagueCodeForCompetition({ id: "comp_8814", name: "LaLiga", country: "Spain" }), "SP1");
   assert.equal(leagueCodeForCompetition({ name: "LaLiga", country: "Spain" }), "SP1");
+  assert.equal(leagueCodeForCompetition({ id: "comp_8531", name: "Belgian Pro League", country: "Belgium" }), "B1");
+  assert.equal(leagueCodeForCompetition({ id: "comp_6387", name: "Scottish Premiership", country: "Scotland" }), "SC0");
   assert.equal(leagueCodeForCompetition({ id: "comp_0976", name: "LaLiga 2", country: "Spain" }), null);
-  assert.equal(leagueCodeForCompetition({ name: "Championship", country: "England" }), null);
   assert.equal(leagueCodeForCompetition({ name: "UEFA Champions League", country: "Europe" }), "CL");
 });
 
@@ -84,7 +86,7 @@ test("official Premier League names link to Football-Data short names", () => {
   }
 });
 
-test("provider aliases cover the observed Big Five team-name differences", () => {
+test("provider aliases cover supported domestic team-name differences", () => {
   const aliases = [
     ["Newcastle United", "Newcastle"],
     ["Wolverhampton", "Wolves"],
@@ -129,6 +131,17 @@ test("provider aliases cover the observed Big Five team-name differences", () =>
     ["RC Strasbourg", "Strasbourg"],
     ["Stade de Reims", "Reims"],
     ["Clermont Foot", "Clermont"],
+    ["Blackburn Rovers", "Blackburn"],
+    ["Preston North End", "Preston"],
+    ["Queens Park Rangers", "QPR"],
+    ["Sheffield Wednesday", "Sheffield Weds"],
+    ["West Bromwich Albion", "West Brom"],
+    ["RSC Anderlecht", "Anderlecht"],
+    ["Club Brugge KV", "Club Brugge"],
+    ["KRC Genk", "Genk"],
+    ["Union Saint-Gilloise", "St. Gilloise"],
+    ["Sint-Truidense VV", "St Truiden"],
+    ["Heart of Midlothian", "Hearts"],
   ];
 
   for (const [providerName, footballDataName] of aliases) {

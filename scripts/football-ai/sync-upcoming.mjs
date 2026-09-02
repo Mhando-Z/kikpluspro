@@ -37,12 +37,13 @@ function fixturePredictionKey(modelId, fixtureId) {
 
 async function fetchAllRecentMatches(supabase, trainedTo, modelKey) {
   const matches = [];
+  const competitionCodes = modelFamilyForKey(modelKey).competitionCodes;
   for (let offset = 0; ; offset += 1000) {
     let query = supabase.from("ai_matches").select("*")
       .order("match_date", { ascending: true }).order("id", { ascending: true })
       .range(offset, offset + 999);
     if (trainedTo) query = query.gt("match_date", trainedTo);
-    if (modelKey === AI_MODEL_KEY) query = query.neq("league_code", "CL");
+    query = query.in("league_code", competitionCodes);
     const { data, error } = await query;
     if (error) throw new Error(`Could not load post-training results: ${error.message}`);
     matches.push(...(data ?? []));
@@ -175,12 +176,20 @@ async function main() {
   const fixtures = await scheduledFixtures(supabase, days);
   const rows = [];
   const skipped = [];
+  const unavailableModelKeys = new Set();
+  const untrainedCompetitions = new Set();
   for (const fixture of fixtures) {
     const modelKey = modelKeyForCompetition(fixture.league_code);
     const model = models.get(modelKey);
     const state = states.get(modelKey);
     if (!model || !state) {
       skipped.push(fixture);
+      unavailableModelKeys.add(modelKey);
+      continue;
+    }
+    if (!Number(state.leagues?.[fixture.league_code]?.matches ?? 0)) {
+      skipped.push(fixture);
+      untrainedCompetitions.add(fixture.league_code);
       continue;
     }
     rows.push(predictionRow(model, fixture, predictMatch(state, fixture)));
@@ -197,7 +206,13 @@ async function main() {
   }
   if (skipped.length) {
     const needsUcl = skipped.some((fixture) => modelKeyForCompetition(fixture.league_code) === UCL_MODEL_KEY);
-    console.warn(`Skipped ${skipped.length} fixtures without their specialist model.${needsUcl ? " Run npm run ai:ucl:train." : ""}`);
+    console.warn(`Skipped ${skipped.length} fixtures without a compatible trained model.${needsUcl ? " Run npm run ai:ucl:train for UCL coverage." : ""}`);
+  }
+  if (unavailableModelKeys.size) {
+    console.warn(`Missing active model families: ${[...unavailableModelKeys].map((key) => modelFamilyForKey(key).label).join(", ")}.`);
+  }
+  if (untrainedCompetitions.size) {
+    console.warn(`The active domestic model has no training history for: ${[...untrainedCompetitions].sort().join(", ")}. Import history and retrain before forecasting these competitions.`);
   }
   const coldStarts = rows.filter((row) => Math.min(row.features.homeMatchesKnown, row.features.awayMatchesKnown) < 6).length;
   console.log(`Low-history forecasts: ${coldStarts}.`);

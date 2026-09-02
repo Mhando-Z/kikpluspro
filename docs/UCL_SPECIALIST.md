@@ -9,10 +9,11 @@ never silently uses the domestic model for a `CL` fixture.
 
 | Fixture code | Model family | Missing-model behavior |
 | --- | --- | --- |
-| `E0`, `SP1`, `I1`, `D1`, `F1` | Domestic Big Five | Sync stops if the domestic model is absent |
+| `E0`, `SP1`, `I1`, `D1`, `F1` | Big Five model | Only these fixtures are skipped if the family is absent |
+| `E1`, `B1`, `SC0` | Domestic expansion model | Only these fixtures are skipped if the family is absent |
 | `CL` | UEFA Champions League specialist | Fixture is skipped with a training instruction |
 
-Supabase permits one active version per model key, so both families can operate
+Supabase permits one active version per model key, so all three families can operate
 at the same time and keep separate performance records.
 
 ## Source strategy
@@ -22,7 +23,7 @@ at the same time and keep separate performance records.
 | Historical UCL results and stage context | OpenFootball CC0 archive | Retained permanently in Supabase |
 | Historical xG, stats, odds and rich match payloads | TheStatsAPI during the trial | Retained archive; no future calls required |
 | Current UCL fixtures, results and crests | TheStatsAPI while a key is configured | Football-Data.org free `CL` endpoint |
-| Shared Big Five club strength | Football-Data.co.uk domestic history | Existing Supabase match archive |
+| Shared domestic club strength | Football-Data.co.uk domestic history | Existing Supabase match archive |
 
 TheStatsAPI is a temporary teacher and preferred current feed, not a permanent
 runtime dependency. Every raw enrichment payload is archived under its provider

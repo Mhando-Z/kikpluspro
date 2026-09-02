@@ -15,7 +15,7 @@ test("UCL samples spend enrichment calls on linked main-competition rows first",
   assert.deepEqual(selected.map((row) => row.source.id), ["main-1", "main-2"]);
 });
 
-test("domestic selection retains unlinked rows for alias diagnostics", () => {
+test("domestic selection also protects quota by enriching linked rows only", () => {
   const selected = selectEnrichmentMatches(rows, { leagueCode: "E0", limit: 2 });
-  assert.deepEqual(selected.map((row) => row.source.id), ["qualifier-1", "main-1"]);
+  assert.deepEqual(selected.map((row) => row.source.id), ["main-1", "main-2"]);
 });

@@ -57,7 +57,7 @@ export function SyncConsole() {
         setAssetError(null);
       }
       response.ok
-        ? toast.success(body.mode === "team-assets" ? "Team catalog and logo links updated" : "Synchronization request completed")
+        ? toast.success(body.mode?.startsWith("team-assets") ? "Team catalog and logo links updated" : "Synchronization request completed")
         : toast.error(payload.error ?? "Sync failed");
     } catch (error) {
       setResult({ error: error.message });
@@ -148,12 +148,13 @@ export function SyncConsole() {
           </button>
           <button className="button-secondary" disabled={loading} onClick={() => request({ mode: "due", limit: 10 })} type="button"><RefreshCw className="size-4" /> Run due jobs</button>
           <button className="button-secondary" disabled={loading} onClick={() => request({ mode: "team-assets" })} type="button"><ImageDown className="size-4" /> Sync team assets</button>
+          <button className="button-secondary" disabled={loading} onClick={() => request({ mode: "team-assets-targeted" })} type="button"><ImageDown className="size-4" /> Sync missing UCL teams</button>
           <button className="button-secondary" disabled={loading} onClick={reconcileAssets} type="button"><SearchCheck className="size-4" /> Reconcile cached assets</button>
         </div>
 
         <div className="mt-4 rounded-2xl bg-brand-soft p-3 text-xs leading-5 text-brand-strong">
           <div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0" /><p>The admin key stays in this request only and is never saved in browser storage.</p></div>
-          <div className="mt-2 flex items-start gap-2"><Link2 className="mt-0.5 size-4 shrink-0" /><p>Team assets use five country catalog calls plus the 2024/25 Champions League. Logos are linked to canonical AI teams and are never used as model features.</p></div>
+          <div className="mt-2 flex items-start gap-2"><Link2 className="mt-0.5 size-4 shrink-0" /><p>The targeted UCL repair uses five country catalog calls. Duplicate historical identities inherit the canonical logo without duplicating the unique API team ID.</p></div>
         </div>
       </section>
 
@@ -165,12 +166,13 @@ export function SyncConsole() {
         <div className="p-5 sm:p-6">
           {assets ? (
             <div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
                 {[
-                  { label: "Coverage", value: percent(assets.coverage), icon: CheckCircle2 },
-                  { label: "AI teams linked", value: assets.linked ?? 0, icon: Link2 },
+                  { label: "Logo coverage", value: percent(assets.coverage), icon: CheckCircle2 },
+                  { label: "Logos resolved", value: assets.assetsResolved ?? assets.linked ?? 0, icon: ImageDown },
+                  { label: "API IDs linked", value: assets.identityLinked ?? 0, icon: Link2 },
                   { label: "Catalog teams", value: assets.catalogTeams ?? 0, icon: UsersRound },
-                  { label: "Unresolved", value: assets.unresolvedCount ?? 0, icon: AlertTriangle },
+                  { label: "Needs logo", value: assets.unresolvedCount ?? 0, icon: AlertTriangle },
                 ].map(({ label, value, icon: Icon }) => (
                   <div className="rounded-2xl bg-surface-soft p-3" key={label}>
                     <Icon className="size-4 text-brand-strong" />

@@ -32,3 +32,20 @@ test("different test seasons require manual review", () => {
   assert.equal(result.promote, false);
   assert.match(result.reason, /different seasons/i);
 });
+
+test("an expanded competition scope requires manual review", () => {
+  const result = promotionDecision({
+    activeModel: {
+      metrics: {
+        ...model(1.01, 0.2).metrics,
+        competitionCodes: ["E0", "SP1"],
+      },
+    },
+    candidateMetrics: {
+      ...model(1.0, 0.19).metrics,
+      competitionCodes: ["E0", "E1", "SP1"],
+    },
+  });
+  assert.equal(result.promote, false);
+  assert.match(result.reason, /scope changed/i);
+});

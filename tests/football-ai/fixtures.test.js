@@ -29,13 +29,15 @@ test("fixture feed keeps supported leagues, dates and market prices", () => {
     sourceLastModified: "2026-08-28T15:00:00.000Z",
   });
 
-  assert.equal(fixtures.length, 1);
+  assert.equal(fixtures.length, 2);
   assert.equal(fixtures[0].league_code, "E0");
   assert.equal(fixtures[0].season_start, 2026);
   assert.equal(fixtures[0].kickoff_at, "2026-08-30T15:30:00.000Z");
   assert.equal(fixtures[0].market_home_odds, 1.8);
   assert.equal(fixtures[0].over_25_odds, 1.92);
   assert.match(fixtures[0].source_fixture_key, /arsenal.*chelsea/);
+  assert.equal(fixtures[1].league_code, "B1");
+  assert.equal(fixtures[1].country_code, "belgium");
 });
 
 test("fixture feed excludes fixtures that kicked off earlier today", () => {

@@ -1,5 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
-import { AI_MODEL_KEY, FEATURE_VERSION } from "../../lib/football-ai/constants.js";
+import {
+  AI_MODEL_KEY,
+  modelFamilyForKey,
+  UCL_MODEL_KEY,
+} from "../../lib/football-ai/constants.js";
 import {
   cloneModelState,
   evaluateWalkForward,
@@ -17,13 +21,14 @@ function argumentsOf(values) {
   }));
 }
 
-async function fetchAllMatches(supabase) {
+async function fetchAllMatches(supabase, competitionCodes) {
   const matches = [];
   const pageSize = 1000;
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
       .from("ai_matches")
       .select("*")
+      .in("league_code", competitionCodes)
       .order("match_date", { ascending: true })
       .order("id", { ascending: true })
       .range(from, from + pageSize - 1);
@@ -56,11 +61,11 @@ async function fetchAllEnrichments(supabase) {
   return rows;
 }
 
-async function activeModel(supabase) {
+async function activeModel(supabase, modelKey) {
   const { data, error } = await supabase
     .from("ai_model_versions")
     .select("id,version,trained_to,metrics")
-    .eq("model_key", AI_MODEL_KEY)
+    .eq("model_key", modelKey)
     .eq("is_active", true)
     .eq("status", "ready")
     .order("version", { ascending: false })
@@ -70,10 +75,10 @@ async function activeModel(supabase) {
   return data;
 }
 
-async function upsertFeatures(supabase, featureRows) {
+async function upsertFeatures(supabase, featureRows, featureVersion) {
   const rows = featureRows.map((row) => ({
     match_id: row.matchId,
-    feature_version: FEATURE_VERSION,
+    feature_version: featureVersion,
     features: row.features,
     target_result: row.targetResult,
     target_home_goals: row.targetHomeGoals,
@@ -89,15 +94,23 @@ async function upsertFeatures(supabase, featureRows) {
 
 async function main() {
   const args = argumentsOf(process.argv.slice(2));
+  const modelKey = String(args["model-key"] ?? AI_MODEL_KEY);
+  if (modelKey === UCL_MODEL_KEY) throw new Error("Use npm run ai:ucl:train for the UCL specialist.");
+  const family = modelFamilyForKey(modelKey);
+  if (!family.competitionCodes.length || !family.algorithm || !family.featureVersion) {
+    throw new Error(`Unknown baseline model key: ${modelKey}`);
+  }
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.");
   const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-  const rawMatches = await fetchAllMatches(supabase);
+  const rawMatches = await fetchAllMatches(supabase, family.competitionCodes);
   const enrichments = await fetchAllEnrichments(supabase);
-  const matches = enrichTrainingMatches(rawMatches, enrichments);
-  if (matches.length < 500) throw new Error(`Only ${matches.length} matches found. Import historical data first.`);
-  const currentActiveModel = await activeModel(supabase);
+  const matchIds = new Set(rawMatches.map((match) => match.id));
+  const familyEnrichments = enrichments.filter((row) => matchIds.has(row.ai_match_id));
+  const matches = enrichTrainingMatches(rawMatches, familyEnrichments);
+  if (matches.length < 500) throw new Error(`Only ${matches.length} ${family.shortLabel} matches found. Import historical data first.`);
+  const currentActiveModel = await activeModel(supabase, modelKey);
   const minimumNewMatches = Number(args["min-new-matches"] ?? 0);
   if (!Number.isInteger(minimumNewMatches) || minimumNewMatches < 0) {
     throw new Error("--min-new-matches must be a non-negative integer.");
@@ -131,17 +144,25 @@ async function main() {
   console.log(`Validation season ${validationSeason}: ${validationMatches.length}`);
   console.log(`Test season ${testSeason}: ${testMatches.length}`);
 
-  const training = trainModel(trainingMatches);
+  console.log(`Training ${family.label} (${family.competitionCodes.join(", ")}).`);
+  const modelOptions = {
+    modelKey,
+    algorithm: family.algorithm,
+    featureVersion: family.featureVersion,
+  };
+  const training = trainModel(trainingMatches, modelOptions);
   const validation = evaluateWalkForward(training.state, validationMatches);
   const calibration = fitTemperatureCalibration(validation.predictions, { fittedSeason: validationSeason });
   const uncalibratedTest = evaluateWalkForward(validation.state, testMatches);
   const calibratedState = cloneModelState(validation.state);
   calibratedState.calibration = calibration;
   const test = evaluateWalkForward(calibratedState, testMatches);
-  const final = trainModel(matches);
+  const final = trainModel(matches, modelOptions);
   final.state.calibration = calibration;
   const summary = modelSummary(final.state);
   const metrics = {
+    competitionCodes: family.competitionCodes,
+    modelFamily: family.label,
     validationSeason,
     testSeason,
     validation: validation.metrics,
@@ -149,7 +170,7 @@ async function main() {
     testUncalibrated: uncalibratedTest.metrics,
     test: test.metrics,
     enrichment: {
-      linkedRows: enrichments.length,
+      linkedRows: familyEnrichments.length,
       statsRows: enrichedMatches,
       xgRows: xgMatches,
     },
@@ -172,20 +193,20 @@ async function main() {
 
   if (args["persist-features"]) {
     console.log(`Persisting ${final.featureRows.length} leakage-safe feature rows...`);
-    await upsertFeatures(supabase, final.featureRows);
+    await upsertFeatures(supabase, final.featureRows, family.featureVersion);
   }
 
   const { data: latest, error: versionError } = await supabase
     .from("ai_model_versions")
     .select("version")
-    .eq("model_key", AI_MODEL_KEY)
+    .eq("model_key", modelKey)
     .order("version", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (versionError) throw new Error(versionError.message);
   const version = (latest?.version ?? 0) + 1;
   const { data: inserted, error: insertError } = await supabase.from("ai_model_versions").insert({
-    model_key: AI_MODEL_KEY,
+    model_key: modelKey,
     version,
     algorithm: final.state.algorithm,
     feature_version: final.state.featureVersion,

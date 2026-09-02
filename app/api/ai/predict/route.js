@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import { FOOTBALL_DATA_LEAGUES } from "@/lib/football-ai/constants";
+import { FOOTBALL_DATA_LEAGUES, modelFamilyForKey, modelKeyForCompetition } from "@/lib/football-ai/constants";
 import { loadCachedTeamAssetResolver } from "@/lib/api-football/team-assets";
 import { predictMatch } from "@/lib/football-ai/model";
 import { getActiveModelRecord } from "@/lib/football-ai/repository";
@@ -24,9 +24,14 @@ export async function POST(request) {
     if (input.matchDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.matchDate)) {
       return NextResponse.json({ error: "matchDate must use YYYY-MM-DD." }, { status: 422 });
     }
-    const { record, error } = await getActiveModelRecord();
+    const modelKey = modelKeyForCompetition(input.leagueCode);
+    const { record, error } = await getActiveModelRecord(modelKey);
     if (error) return NextResponse.json({ error }, { status: 503 });
-    if (!record?.artifact) return NextResponse.json({ error: "No active trained model exists." }, { status: 404 });
+    if (!record?.artifact) {
+      return NextResponse.json({
+        error: `No active ${modelFamilyForKey(modelKey).label} exists for ${input.leagueCode || "this competition"}.`,
+      }, { status: 404 });
+    }
 
     const home = record.artifact.teams?.[input.homeTeamKey];
     const away = record.artifact.teams?.[input.awayTeamKey];
@@ -88,6 +93,9 @@ export async function POST(request) {
     return NextResponse.json({
       prediction,
       model: {
+        modelKey: record.model_key,
+        family: modelFamilyForKey(record.model_key).label,
+        shortFamily: modelFamilyForKey(record.model_key).shortLabel,
         version: record.version,
         algorithm: record.algorithm,
         trainedTo: record.trained_to,

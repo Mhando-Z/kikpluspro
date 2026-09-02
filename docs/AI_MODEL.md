@@ -9,7 +9,7 @@ This is a probabilistic analytical product. It does not guarantee an outcome and
 ## Architecture
 
 1. `scripts/football-ai/import-football-data.mjs` downloads selected league-season CSVs directly from the source and upserts normalized matches into Supabase.
-2. `scripts/football-ai/train-baseline.mjs` loads matches in chronological order, splits them by season, evaluates the model, and activates a versioned artifact.
+2. `scripts/football-ai/train-baseline.mjs` trains one requested domestic family at a time. Big Five and expansion matches never share model state, parameters or calibration.
 3. `scripts/football-ai/import-thestatsapi.mjs` temporarily archives advanced historical payloads and links normalized xG/statistics to matching Football-Data rows.
 4. `app/api/ai/model/route.js` exposes safe model metadata and supported teams.
 5. `app/api/ai/predict/route.js` loads the active server-side artifact and calculates a forecast. Optional auditing records the input features and output.
@@ -24,7 +24,7 @@ This is a probabilistic analytical product. It does not guarantee an outcome and
 14. `scripts/football-ai/import-ucl-history.mjs` imports CC0 Champions League history and normalizes European club identities.
 15. `scripts/football-ai/train-ucl.mjs` creates a separately versioned UCL specialist, incorporates linked historical xG/statistics, and evaluates it only on chronological UCL matches.
 16. `lib/thestatsapi/ucl-fixtures.js` supplies current UCL fixtures/results/crests during the trial; Football-Data.org is the automatic fallback.
-17. `scripts/football-ai/sync-upcoming.mjs` selects the active model by competition code: `CL` uses the UCL family and domestic codes use the Big Five family.
+17. `scripts/football-ai/sync-upcoming.mjs` selects the active model by competition code: the Big Five use `elo-poisson-global`, `E1`/`B1`/`SC0` use `domestic-expansion`, and `CL` uses the UCL specialist.
 
 API-Football remains the visual identity source. The AI routes read cached rows
 from the normalized `teams` table and resolve Football-Data names to an
@@ -35,22 +35,26 @@ The service-role key and complete model artifact stay on the server. They must n
 
 ## Data coverage
 
-The importer supports these top-flight league codes:
+The importer supports these domestic league codes:
 
 | Code | League | Country |
 | --- | --- | --- |
 | `E0` | Premier League | England |
+| `E1` | EFL Championship | England |
 | `SP1` | La Liga | Spain |
 | `I1` | Serie A | Italy |
 | `D1` | Bundesliga | Germany |
 | `F1` | Ligue 1 | France |
+| `B1` | Belgian Pro League | Belgium |
+| `SC0` | Scottish Premiership | Scotland |
 | `CL` | UEFA Champions League | Europe |
 
 Rows include the final result, goals, shots, shots on target, disciplinary statistics, optional xG, and selected market odds when the source supplies them. Result fields are never used as inputs for their own match.
 
 ## Calibrated model
 
-The version 3 candidate combines:
+Each domestic family uses the same leakage-safe hybrid algorithm while learning
+only from its own competition scope. The model combines:
 
 - Dynamic team Elo ratings with a home advantage and post-match updates.
 - Home/away attacking and defensive goal rates with Bayesian shrinkage toward league averages.
@@ -95,7 +99,14 @@ Reported metrics are accuracy, multiclass log loss, multiclass Brier score, goal
 ```bash
 npm run ai:import:dry -- --seasons=2024,2025 --leagues=E0,SP1
 npm run ai:import -- --from=2010 --to=2025
-npm run ai:train
+npm run ai:leagues:coverage
+npm run ai:leagues:import:dry -- --seasons=2018,2019,2020,2021,2022,2023,2024,2025
+npm run ai:leagues:import -- --seasons=2018,2019,2020,2021,2022,2023,2024,2025
+npm run ai:leagues:enrich:sample
+npm run ai:leagues:enrich -- --seasons=2018,2019,2020,2021,2022,2023,2024,2025
+npm run ai:train:big-five:candidate -- --validation-season=2024 --test-season=2025
+npm run ai:train:expansion:candidate -- --validation-season=2024 --test-season=2025
+npm run ai:model:activate -- --model-key=domestic-expansion --version=1
 npm run ai:train:features
 npm run ai:ucl:import -- --from=2011 --to=2025
 npm run ai:ucl:enrich:sample -- --seasons=2024
@@ -107,7 +118,7 @@ npm run ai:fixtures:settle
 npm run ai:fixtures:update
 ```
 
-Use `--validation-season=2024 --test-season=2025` with either training command to choose explicit splits. The season value means the starting year: `2025` is the 2025/26 campaign.
+Use `--validation-season=2024 --test-season=2025` with either domestic training command to choose explicit splits. The season value means the starting year: `2025` is the 2025/26 campaign.
 
 Re-running either importer is safe because source identifiers are deterministic and TheStatsAPI payloads are skipped once archived. Each training run creates a new immutable version. Automatic promotion occurs only when held-out log loss improves without a material Brier-score regression.
 
@@ -115,10 +126,15 @@ Set `AI_AUDIT_PREDICTIONS=true` only when you intentionally want to store public
 
 ## Current-fixture lifecycle
 
-`ai:fixtures:sync` reads `fixtures.csv`, keeps only the five supported leagues,
+`ai:fixtures:sync` reads `fixtures.csv`, keeps only the eight supported domestic leagues,
 converts source times from Europe/London to UTC, upserts teams and fixtures, and
 creates deterministic prediction audit rows. Re-running it updates the same
 fixture and prediction records.
+
+Big Five fixtures are routed to their isolated active model; Championship,
+Belgian and Scottish fixtures are routed to the expansion model. One family
+cannot change another family's team ratings, league baselines or probability
+calibration.
 
 When `THESTATSAPI_KEY` is configured, the same command prefers its Champions
 League feed. On provider failure or after the trial key is removed, it uses the
@@ -132,6 +148,11 @@ The active training artifact is immutable. Before inference, the sync script
 clones that artifact and applies completed `ai_matches` later than its
 `trained_to` date. This derived state gives future forecasts current Elo and
 form without corrupting the benchmarked model version.
+
+An active artifact must contain learned league history before the sync job can
+forecast that league. A missing expansion model cannot fall back to the Big
+Five artifact and a missing UCL model cannot fall back to either domestic
+family.
 
 `ai:fixtures:settle` checks domestic fixtures against the current season result
 CSV and UCL fixtures against the preferred/fallback provider. A natural match

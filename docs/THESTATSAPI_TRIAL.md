@@ -48,6 +48,19 @@ npm run ai:enrich:sample -- --seasons=2024 --leagues=E0
 npm run ai:enrich -- --seasons=2022,2023,2024,2025 --leagues=E0,SP1,I1,D1,F1 --resources=stats,odds
 ```
 
+For the first domestic expansion:
+
+```bash
+npm run ai:leagues:coverage
+npm run ai:leagues:import:dry -- --seasons=2018,2019,2020,2021,2022,2023,2024,2025
+npm run ai:leagues:import -- --seasons=2018,2019,2020,2021,2022,2023,2024,2025
+npm run ai:leagues:enrich:sample
+npm run ai:leagues:enrich -- --seasons=2018,2019,2020,2021,2022,2023,2024,2025
+```
+
+The coverage command costs one request per selected competition and reports
+season-level fixture, team-stat, xG and odds percentages before a backfill.
+
 ## Safe Champions League import
 
 Import OpenFootball history first so provider matches can link to stable
@@ -70,11 +83,11 @@ be repaired without refetching cached stats. Use `--refresh` only when you
 intentionally want to call the provider again. If a network failure or run cap
 stops the import, rerun the same command; completed payloads remain safe.
 
-For `CL`, the importer discovers the whole provider season and then selects
-only rows linked to the OpenFootball main-competition archive. Qualifiers and
-other unlinked rows are retained as provider metadata for diagnosis, but they
-do not trigger paid per-match enrichment calls. Therefore a 25-match sample
-means 25 linked training matches rather than the provider's first 25 rows.
+For every competition, the importer discovers the whole provider season and
+then spends paid per-match calls only on rows linked to the canonical training
+archive. Unlinked rows remain stored as provider metadata for alias diagnosis.
+Therefore a 25-match sample means 25 linked training matches rather than the
+provider's first 25 rows.
 
 Archive lower-priority rich endpoints only after stats and odds succeed:
 
@@ -85,7 +98,8 @@ npm run ai:ucl:archive -- --seasons=2022,2023,2024,2025
 ## Training
 
 ```bash
-npm run ai:train:features -- --promotion=auto
+npm run ai:train:big-five:candidate -- --validation-season=2024 --test-season=2025
+npm run ai:train:expansion:candidate -- --validation-season=2024 --test-season=2025
 npm run ai:ucl:train
 ```
 
@@ -93,7 +107,9 @@ The hybrid signal uses historical xG/npxG when available and falls back to
 goals for matches without it. Post-match measurements are applied only after
 that match's prediction. Market odds are used for benchmarking, not as an
 outcome label or a live dependency. A candidate replaces an active model only
-when the chronological probability-quality gate approves it.
+when the chronological probability-quality gate approves it. Big Five and
+expansion training are isolated, so provider data from E1, B1 or SC0 cannot
+change Big Five calibration or ratings.
 
 ## After the trial
 

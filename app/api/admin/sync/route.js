@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { reconcileCachedTeamAssets, TEAM_ASSET_SYNC_JOBS } from "@/lib/api-football/team-assets";
+import {
+  reconcileCachedTeamAssets,
+  TARGETED_TEAM_ASSET_SYNC_JOBS,
+  TEAM_ASSET_SYNC_JOBS,
+} from "@/lib/api-football/team-assets";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -24,9 +28,12 @@ export async function POST(request) {
   }
 
   const body = await request.json();
-  const isTeamAssetSync = body.mode === "team-assets";
+  const isTeamAssetSync = ["team-assets", "team-assets-targeted"].includes(body.mode);
+  const assetJobs = body.mode === "team-assets-targeted"
+    ? TARGETED_TEAM_ASSET_SYNC_JOBS
+    : TEAM_ASSET_SYNC_JOBS;
   const upstreamBody = isTeamAssetSync
-    ? { jobs: TEAM_ASSET_SYNC_JOBS.map(({ endpoint, params, force }) => ({ endpoint, params, force })) }
+    ? { jobs: assetJobs.map(({ endpoint, params, force }) => ({ endpoint, params, force })) }
     : body;
   const headers = {
     "content-type": "application/json",

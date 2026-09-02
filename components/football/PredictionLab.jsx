@@ -39,9 +39,19 @@ async function fetchActiveModel() {
   const response = await fetch("/api/ai/model", { cache: "no-store" });
   const payload = await response.json();
   if (!response.ok || !payload.ready) throw new Error(payload.error || "The trained model is not available.");
-  const usableLeagues = payload.model.leagues.filter((league) => league.teams.length >= 2);
+  const usableModels = (payload.models ?? [payload.model]).map((model) => ({
+    ...model,
+    leagues: model.leagues.filter((league) => league.teams.length >= 2),
+  })).filter((model) => model.leagues.length);
+  const usableLeagues = usableModels.flatMap((model) => model.leagues.map((league) => ({
+    ...league,
+    modelKey: model.modelKey,
+    modelFamily: model.family,
+    modelVersion: model.version,
+  })));
   if (!usableLeagues.length) throw new Error("The active model does not contain two teams in a supported league.");
-  return { ...payload.model, leagues: usableLeagues };
+  const primary = usableModels.find((model) => model.modelKey === payload.model?.modelKey) ?? usableModels[0];
+  return { ...primary, models: usableModels, leagues: usableLeagues };
 }
 
 function Metric({ icon: Icon, label, value, detail }) {
@@ -109,7 +119,8 @@ function EmptyModel({ error, onRetry, loading }) {
             {[
               ["1", "Apply the AI migration", "supabase db push"],
               ["2", "Import historical matches", "npm run ai:import -- --from=2010 --to=2025"],
-              ["3", "Train and activate", "npm run ai:train"],
+              ["3", "Train Big Five model", "npm run ai:train"],
+              ["4", "Train expansion model", "npm run ai:train:expansion"],
             ].map(([number, title, command]) => (
               <li className="flex gap-3" key={number}>
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-[#31dfa4]/15 font-black text-[#8af0cc]">{number}</span>
@@ -169,6 +180,10 @@ export function PredictionLab() {
     () => status.model?.leagues.find((item) => item.code === leagueCode) ?? status.model?.leagues[0],
     [leagueCode, status.model],
   );
+  const selectedModel = useMemo(
+    () => status.model?.models?.find((model) => model.modelKey === league?.modelKey) ?? status.model,
+    [league, status.model],
+  );
 
   function selectLeague(code) {
     const nextLeague = status.model?.leagues.find((item) => item.code === code);
@@ -213,9 +228,9 @@ export function PredictionLab() {
 
   if (!status.model) return <EmptyModel error={status.error} onRetry={loadModel} loading={status.loading} />;
 
-  const metrics = status.model.metrics?.test ?? {};
-  const uncalibratedMetrics = status.model.metrics?.testUncalibrated ?? null;
-  const calibration = status.model.metrics?.calibration ?? null;
+  const metrics = selectedModel?.metrics?.test ?? {};
+  const uncalibratedMetrics = selectedModel?.metrics?.testUncalibrated ?? null;
+  const calibration = selectedModel?.metrics?.calibration ?? null;
   const leagueMetrics = Object.entries(metrics.byLeague ?? {}).map(([code, values]) => ({
     code,
     name: status.model.leagues.find((item) => item.code === code)?.name ?? code,
@@ -238,7 +253,7 @@ export function PredictionLab() {
               <p className="eyebrow">Fixture simulator</p>
               <h2 className="mt-2 text-xl font-black tracking-[-0.035em]">Build a matchup</h2>
             </div>
-            <span className="chip"><Sparkles className="size-3.5 text-accent" /> v{status.model.version}</span>
+            <span className="chip"><Sparkles className="size-3.5 text-accent" /> {selectedModel?.shortFamily ?? "Model"} v{selectedModel?.version ?? "—"}</span>
           </div>
 
           <div className="mt-6 space-y-4">
@@ -360,7 +375,7 @@ export function PredictionLab() {
           <div>
             <p className="eyebrow">Held-out performance</p>
             <h2 className="mt-2 text-lg font-black tracking-[-0.03em]">What the latest test season measured</h2>
-            <p className="mt-1 text-xs text-ink-muted">Trained through {status.model.trainedTo} · {Number(status.model.testRows || 0).toLocaleString()} unseen test matches</p>
+            <p className="mt-1 text-xs text-ink-muted">{selectedModel?.family} · trained through {selectedModel?.trainedTo} · {Number(selectedModel?.testRows || 0).toLocaleString()} unseen test matches</p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[36rem]">
             <Metric icon={Target} label="Accuracy" value={percentage(metrics.accuracy, 1)} />

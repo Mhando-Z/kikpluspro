@@ -9,6 +9,7 @@ KickPulse is a production-style football intelligence starter built with:
 - Supabase PostgreSQL, Realtime and Edge Functions
 - API-Football v3
 - A calibrated JavaScript Elo + Poisson prediction pipeline
+- Independently trained Big Five and domestic expansion model families
 - A separately trained UEFA Champions League specialist with automatic model routing
 - Temporary TheStatsAPI historical enrichment and preferred UCL feed with a free fallback
 
@@ -40,7 +41,7 @@ ready to use real football data.
 - Predictions, injuries and head-to-head insights
 - Interactive calibrated match simulator with expected goals and score probabilities
 - Automatic current-fixture forecasts and a settled-result scorecard
-- Competition-aware domestic/UCL model switching with separately measured performance
+- Competition-aware Big Five/expansion/UCL switching with separate performance
 - Per-league accuracy, log loss, Brier score and market benchmarking
 - Versioned model training, held-out metrics and prediction audit records
 - Pre-match and live odds
@@ -256,21 +257,30 @@ year, so `2025` means the 2025/26 campaign:
 npm run ai:import -- --from=2010 --to=2025
 ~~~
 
-The importer supports `E0`, `SP1`, `I1`, `D1` and `F1`. It upserts completed
+The importer supports `E0`, `E1`, `SP1`, `I1`, `D1`, `F1`, `B1` and `SC0`. It upserts completed
 matches, so a rerun updates the same source rows instead of duplicating them.
 Current public CSVs are downloaded directly from Football-Data.co.uk; the
 GitHub repository reviewed for this project is useful as a mirror and schema
 reference but can lag the direct source.
 
+To add the Championship, Belgian Pro League and Scottish Premiership using the
+quota-safe rollout, follow [docs/DOMESTIC_EXPANSION.md](docs/DOMESTIC_EXPANSION.md).
+The rollout first imports free base history, verifies TheStatsAPI coverage,
+enriches only linked rows and trains a separate expansion candidate without
+changing Big Five parameters or calibration.
+
 Respect the data source's current terms before commercial redistribution.
 
-## 6. Train and activate the baseline
+## 6. Train the isolated domestic families
 
 ~~~bash
 npm run ai:train
+npm run ai:train:expansion
 ~~~
 
-The trainer uses seasons in chronological order: older seasons for training,
+`ai:train` owns only the Premier League, La Liga, Serie A, Bundesliga and Ligue
+1. `ai:train:expansion` owns only the Championship, Belgian Pro League and
+Scottish Premiership. The trainer uses seasons in chronological order: older seasons for training,
 the penultimate season for probability calibration, and the latest season for
 walk-forward testing. It reports calibrated and uncalibrated accuracy, log
 loss, Brier score, goal error, per-league results and a market benchmark where
@@ -283,10 +293,11 @@ stores raw payloads and links match xG/statistics to the existing historical
 rows. The deployed hybrid model falls back to goal-derived performance after
 the trial and therefore does not need a permanent API subscription.
 
-To persist every pre-match feature snapshot for later XGBoost or LightGBM work:
+To review both families without activating either candidate:
 
 ~~~bash
-npm run ai:train:features
+npm run ai:train:big-five:candidate -- --validation-season=2024 --test-season=2025
+npm run ai:train:expansion:candidate -- --validation-season=2024 --test-season=2025
 ~~~
 
 Open `/simulator` after training. See [docs/AI_MODEL.md](docs/AI_MODEL.md) for
@@ -350,9 +361,10 @@ npm run ai:fixtures:sync
 
 The UCL trainer uses domestic results to seed shared club strength, but its
 calibration and held-out scorecard contain only Champions League matches. The
-fixture sync routes `CL` to `uefa-champions-league` and the five domestic codes
-to `elo-poisson-global`. If the UCL model is missing, Champions League fixtures
-are skipped rather than silently predicted by the wrong family.
+fixture sync routes `CL` to `uefa-champions-league`, the Big Five to
+`elo-poisson-global`, and `E1`/`B1`/`SC0` to `domestic-expansion`. If a required
+family is missing, its fixtures are skipped rather than silently predicted by
+the wrong model.
 
 TheStatsAPI payloads are stored idempotently in Supabase. Odds are retained for
 evaluation and never used as match outcomes. Post-match xG/statistics can only
@@ -562,6 +574,7 @@ npm run build     # Production build
 npm run check     # Lint, tests and production build
 npm run ai:import -- --from=2010 --to=2025
 npm run ai:train
+npm run ai:train:expansion
 npm run ai:fixtures:dry
 npm run ai:fixtures:sync
 npm run ai:fixtures:settle

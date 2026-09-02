@@ -87,8 +87,9 @@ async function fetchRowsInBatches(supabase, table, columns, ids) {
   return rows;
 }
 
-function resourceAllowed(resource, match) {
-  if (resource === "odds") return Boolean(match.odds_available);
+function resourceAllowed(resource, match, competition) {
+  if (resource === "stats") return competition?.has_team_stats !== false;
+  if (resource === "odds") return competition?.odds_available !== false && Boolean(match.odds_available);
   if (resource === "shotmap") return Boolean(match.xg_available);
   return true;
 }
@@ -148,10 +149,11 @@ async function persistProviderTeams(supabase, rows) {
   })), "provider,country_code,provider_name");
 }
 
-export function selectEnrichmentMatches(providerMatches, { leagueCode, limit = Number.POSITIVE_INFINITY } = {}) {
-  const eligible = leagueCode === UCL_COMPETITION_CODE
-    ? providerMatches.filter((row) => row.linked)
-    : providerMatches;
+export function selectEnrichmentMatches(providerMatches, { limit = Number.POSITIVE_INFINITY } = {}) {
+  // Paid per-match resources are useful to training only after the provider
+  // row links to a canonical ai_matches row. Keep every discovered provider
+  // match as metadata below, but never spend trial quota on unlinked rows.
+  const eligible = providerMatches.filter((row) => row.linked);
   return Number.isFinite(limit) ? eligible.slice(0, Math.max(0, limit)) : eligible;
 }
 
@@ -172,7 +174,9 @@ async function importSeason({
     season_id: season.id,
     status: "finished",
   };
-  if (leagueCode !== UCL_COMPETITION_CODE) matchQuery.stage = "regular";
+  if (leagueCode !== UCL_COMPETITION_CODE) {
+    matchQuery.stage = FOOTBALL_DATA_LEAGUES[leagueCode]?.theStatsStage ?? "regular";
+  }
   const discoveredApiMatches = await api.paginate("/football/matches", matchQuery);
   const discoveredProviderMatches = discoveredApiMatches.map((source) => ({
     source,
@@ -186,8 +190,8 @@ async function importSeason({
   const linkedAvailable = discoveredProviderMatches.filter((row) => row.linked).length;
   const matched = providerMatches.filter((row) => row.linked).length;
   console.log(`${leagueCode} ${season.start_year}/${String(season.end_year).slice(-2)}: ${apiMatches.length} selected of ${discoveredApiMatches.length} provider matches; ${matched} linked to training rows (${linkedAvailable} linked available).`);
-  if (leagueCode === UCL_COMPETITION_CODE && discoveredProviderMatches.length > linkedAvailable) {
-    console.log(`  Skipping paid enrichment endpoints for ${discoveredProviderMatches.length - linkedAvailable} unlinked UCL rows.`);
+  if (discoveredProviderMatches.length > linkedAvailable) {
+    console.log(`  Skipping paid enrichment endpoints for ${discoveredProviderMatches.length - linkedAvailable} unlinked ${leagueCode} rows.`);
   }
   if (dryRun) {
     return { discovered: discoveredApiMatches.length, matches: apiMatches.length, linked: matched, payloads: 0, enrichments: 0 };
@@ -242,7 +246,7 @@ async function importSeason({
     const match = apiMatches[index];
     const linked = providerMatches[index].linked;
     for (const resource of resources) {
-      if (!resourceAllowed(resource, match)) continue;
+      if (!resourceAllowed(resource, match, competition)) continue;
       const payloadKey = `${match.id}:${resource}`;
       if (!refresh && existingPayloads.has(payloadKey)) continue;
       try {

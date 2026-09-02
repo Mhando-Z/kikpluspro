@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { AI_MODEL_KEY } from "@/lib/football-ai/constants";
+import { AI_MODEL_KEY, UCL_MODEL_KEY } from "@/lib/football-ai/constants";
 import { getActiveModelRecords, safeModelIdentity } from "@/lib/football-ai/repository";
 import { loadCachedTeamAssetResolver } from "@/lib/api-football/team-assets";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -191,13 +191,14 @@ export async function GET() {
     .slice(0, 20);
   const lastSourceUpdate = rows.reduce((latest, row) =>
     !row.sourceLastModified || latest >= row.sourceLastModified ? latest : row.sourceLastModified, "");
+  const hasUclModel = records.some((record) => record.model_key === UCL_MODEL_KEY);
 
   return NextResponse.json({
     ready: true,
     model: safeModelIdentity(records.find((record) => record.model_key === AI_MODEL_KEY) ?? records[0]),
     models: records.map(safeModelIdentity),
     source: {
-      name: records.length > 1 ? "Football-Data.co.uk + preferred UCL feed" : "Football-Data.co.uk latest fixtures",
+      name: hasUclModel ? "Football-Data.co.uk + preferred UCL feed" : "Football-Data.co.uk latest fixtures",
       url: "https://www.football-data.co.uk/matches.php",
       lastModified: lastSourceUpdate || null,
     },

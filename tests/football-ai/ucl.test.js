@@ -1,13 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { modelKeyForCompetition, AI_MODEL_KEY, UCL_MODEL_KEY } from "../../lib/football-ai/constants.js";
+import {
+  AI_MODEL_KEY,
+  EXPANSION_MODEL_KEY,
+  modelKeyForCompetition,
+  UCL_MODEL_KEY,
+} from "../../lib/football-ai/constants.js";
 import { parseOpenFootballUcl } from "../../lib/football-ai/openfootball.js";
 import { canonicalUclTeam } from "../../lib/football-ai/ucl-teams.js";
 import { buildPrematchFeatures, createModelState, updateModelWithResult } from "../../lib/football-ai/model.js";
 
-test("the model router reserves CL for the UCL specialist", () => {
+test("the model router isolates Big Five, expansion and UCL competitions", () => {
   assert.equal(modelKeyForCompetition("CL"), UCL_MODEL_KEY);
   assert.equal(modelKeyForCompetition("E0"), AI_MODEL_KEY);
+  assert.equal(modelKeyForCompetition("SP1"), AI_MODEL_KEY);
+  assert.equal(modelKeyForCompetition("I1"), AI_MODEL_KEY);
+  assert.equal(modelKeyForCompetition("D1"), AI_MODEL_KEY);
+  assert.equal(modelKeyForCompetition("F1"), AI_MODEL_KEY);
+  assert.equal(modelKeyForCompetition("E1"), EXPANSION_MODEL_KEY);
+  assert.equal(modelKeyForCompetition("B1"), EXPANSION_MODEL_KEY);
+  assert.equal(modelKeyForCompetition("SC0"), EXPANSION_MODEL_KEY);
 });
 
 test("UCL team aliases reuse domestic canonical identities", () => {

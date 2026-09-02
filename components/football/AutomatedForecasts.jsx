@@ -440,7 +440,7 @@ export function AutomatedForecasts() {
               <span className="chip"><Sparkles className="size-3.5 text-accent" /> {state.data.models.length} active model {state.data.models.length === 1 ? "family" : "families"}</span>
             </div>
             <h2 className="mt-3 text-2xl font-black tracking-[-0.04em]">The next fixtures, scored before kickoff.</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Competition-aware routing sends domestic fixtures to the Big Five model and Champions League fixtures to the UCL specialist.</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">Competition-aware routing sends supported domestic fixtures to the domestic league model and Champions League fixtures to the UCL specialist.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <a className="button-ghost text-xs" href={state.data.source.url} target="_blank" rel="noreferrer">
