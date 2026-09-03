@@ -12,8 +12,8 @@ export const metadata = {
   description:
     "An explainable football AI forecasting, model-performance and personal decision-tracking platform powered by Supabase and Next.js.",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
   },
 };
 
