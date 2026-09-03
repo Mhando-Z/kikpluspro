@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { AppProviders } from "@/components/AppProviders";
 import { AppShell } from "@/components/layout/AppShell";
 
-const SITE_URL = "https://kikpluspro.vercel.app/simulator";
+const SITE_URL = "https://kikpulsepro.vercel.app/simulator";
 const SITE_NAME = "KickPulse Football Hub";
 const SITE_DESCRIPTION =
   "KickPulse is an explainable football AI platform delivering match forecasts, transparent model-performance tracking, and personal decision analytics — built on Supabase and Next.js.";
@@ -16,7 +16,12 @@ export const metadata = {
     default: `${SITE_NAME} — Explainable Football AI Forecasting`,
     template: "%s · KickPulse",
   },
+
   description: SITE_DESCRIPTION,
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+  },
 
   keywords: [
     "football AI predictions",
