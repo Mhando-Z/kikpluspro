@@ -248,19 +248,47 @@ export function BetTracker() {
     }
   };
 
+  // const deleteBet = async (bet) => {
+  //   if (
+  //     !window.confirm(
+  //       `Remove ${bet.homeTeam.name} vs ${bet.awayTeam.name} from this device?`,
+  //     )
+  //   )
+  //     return;
+  //   await removeTrackedBet(bet.id);
+  //   setState((current) => ({
+  //     ...current,
+  //     bets: current.bets.filter((item) => item.id !== bet.id),
+  //   }));
+  //   toast.success("Tracked bet removed");
+  // };
+
   const deleteBet = async (bet) => {
-    if (
-      !window.confirm(
-        `Remove ${bet.homeTeam.name} vs ${bet.awayTeam.name} from this device?`,
-      )
-    )
-      return;
-    await removeTrackedBet(bet.id);
-    setState((current) => ({
-      ...current,
-      bets: current.bets.filter((item) => item.id !== bet.id),
-    }));
-    toast.success("Tracked bet removed");
+    toast(
+      `Remove ${bet.homeTeam.name} vs ${bet.awayTeam.name} from this device?`,
+      {
+        action: {
+          label: "Delete",
+          onClick: async () => {
+            try {
+              await removeTrackedBet(bet.id);
+              setState((current) => ({
+                ...current,
+                bets: current.bets.filter((item) => item.id !== bet.id),
+              }));
+              toast.success("Tracked bet removed");
+            } catch (err) {
+              toast.error("Couldn't remove bet — please try again");
+            }
+          },
+        },
+        cancel: {
+          label: "Cancel",
+          onClick: () => {},
+        },
+        duration: 6000,
+      },
+    );
   };
 
   const exportBets = () => {
