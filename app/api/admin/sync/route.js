@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  EXPANSION_TEAM_ASSET_SYNC_JOBS,
   reconcileCachedTeamAssets,
   TARGETED_TEAM_ASSET_SYNC_JOBS,
   TEAM_ASSET_SYNC_JOBS,
@@ -28,10 +29,16 @@ export async function POST(request) {
   }
 
   const body = await request.json();
-  const isTeamAssetSync = ["team-assets", "team-assets-targeted"].includes(body.mode);
+  const isTeamAssetSync = [
+    "team-assets",
+    "team-assets-expansion",
+    "team-assets-targeted",
+  ].includes(body.mode);
   const assetJobs = body.mode === "team-assets-targeted"
     ? TARGETED_TEAM_ASSET_SYNC_JOBS
-    : TEAM_ASSET_SYNC_JOBS;
+    : body.mode === "team-assets-expansion"
+      ? EXPANSION_TEAM_ASSET_SYNC_JOBS
+      : TEAM_ASSET_SYNC_JOBS;
   const upstreamBody = isTeamAssetSync
     ? { jobs: assetJobs.map(({ endpoint, params, force }) => ({ endpoint, params, force })) }
     : body;

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   apiFootballTeamLogo,
   createTeamAssetResolver,
+  EXPANSION_TEAM_ASSET_SYNC_JOBS,
   matchTeamAssets,
   normalizeTeamName,
   teamNameMatchScore,
@@ -33,6 +34,16 @@ test("Football-Data aliases match API-Football team names", () => {
   assert.equal(teamNameMatchScore("QPR", "Queens Park Rangers"), 1);
   assert.equal(teamNameMatchScore("St Gilloise", "Union Saint-Gilloise"), 1);
   assert.equal(teamNameMatchScore("Heart of Midlothian", "Hearts"), 1);
+});
+
+test("expansion asset sync is limited to the three supported countries", () => {
+  assert.deepEqual(
+    EXPANSION_TEAM_ASSET_SYNC_JOBS.map((job) => job.params.country),
+    ["England", "Belgium", "Scotland"],
+  );
+  assert.ok(EXPANSION_TEAM_ASSET_SYNC_JOBS.every((job) => (
+    job.endpoint === "teams" && job.force === true
+  )));
 });
 
 test("resolver returns a country-safe cached API-Football asset", () => {

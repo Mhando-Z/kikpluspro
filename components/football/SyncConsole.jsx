@@ -148,6 +148,7 @@ export function SyncConsole() {
           </button>
           <button className="button-secondary" disabled={loading} onClick={() => request({ mode: "due", limit: 10 })} type="button"><RefreshCw className="size-4" /> Run due jobs</button>
           <button className="button-secondary" disabled={loading} onClick={() => request({ mode: "team-assets" })} type="button"><ImageDown className="size-4" /> Sync team assets</button>
+          <button className="button-secondary" disabled={loading} onClick={() => request({ mode: "team-assets-expansion" })} type="button"><ImageDown className="size-4" /> Sync expansion league teams</button>
           <button className="button-secondary" disabled={loading} onClick={() => request({ mode: "team-assets-targeted" })} type="button"><ImageDown className="size-4" /> Sync missing UCL teams</button>
           <button className="button-secondary" disabled={loading} onClick={reconcileAssets} type="button"><SearchCheck className="size-4" /> Reconcile cached assets</button>
         </div>
@@ -155,6 +156,7 @@ export function SyncConsole() {
         <div className="mt-4 rounded-2xl bg-brand-soft p-3 text-xs leading-5 text-brand-strong">
           <div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0" /><p>The admin key stays in this request only and is never saved in browser storage.</p></div>
           <div className="mt-2 flex items-start gap-2"><Link2 className="mt-0.5 size-4 shrink-0" /><p>The targeted UCL repair uses five country catalog calls. Duplicate historical identities inherit the canonical logo without duplicating the unique API team ID.</p></div>
+          <div className="mt-2 flex items-start gap-2"><UsersRound className="mt-0.5 size-4 shrink-0" /><p>The expansion repair uses only England, Belgium and Scotland, then reconciles E1, B1 and SC0 from the refreshed catalog.</p></div>
         </div>
       </section>
 
