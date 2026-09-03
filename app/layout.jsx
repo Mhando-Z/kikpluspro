@@ -84,7 +84,7 @@ export const metadata = {
     apple: "/favicon.ico",
   },
 
-  manifest: "/manifest.webmanifest",
+  // manifest: "/manifest.webmanifest",
 
   category: "sports analytics",
 
