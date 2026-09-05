@@ -105,7 +105,7 @@ function ErrorState({ error, onRetry }) {
 function TrendChart({ timeline }) {
   const maximum = Math.max(1, ...timeline.map((item) => item.total));
   return (
-    <section className="surface-panel p-5 sm:p-6">
+    <section className="surface-panel hidden md:block p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="eyebrow">Prediction activity</p>
