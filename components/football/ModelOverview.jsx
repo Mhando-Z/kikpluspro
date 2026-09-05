@@ -362,42 +362,123 @@ function RecentResults({ rows }) {
         </Link>
       </div>
       {rows.length ? (
+        // <div className="divide-y divide-line">
+        //   {rows.map((item) => (
+        //     <div
+        //       className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:px-6"
+        //       key={item.id}
+        //     >
+        //       <div className="flex min-w-0 items-center gap-3">
+        //         <div className="flex -space-x-2">
+        //           <TeamMark team={item.homeTeam} size="sm" />
+        //           <TeamMark team={item.awayTeam} size="sm" />
+        //         </div>
+        //         <div className="min-w-0">
+        //           <p className="truncate text-sm font-extrabold">
+        //             {item.homeTeam.name}{" "}
+        //             <span className="text-ink-muted">v</span>{" "}
+        //             {item.awayTeam.name}
+        //           </p>
+        //           <p className="mt-0.5 text-[0.65rem] text-ink-muted">
+        //             {item.leagueName} · Pick {item.predicted.label}{" "}
+        //             {percentage(item.predicted.probability)}
+        //           </p>
+        //         </div>
+        //       </div>
+        //       <p className="text-lg font-black tabular-nums">
+        //         {item.score.home}–{item.score.away}
+        //       </p>
+        //       <span
+        //         className={`flex items-center gap-1.5 text-xs font-extrabold ${item.correct ? "text-brand-strong" : "text-danger"}`}
+        //       >
+        //         {item.correct ? (
+        //           <CheckCircle2 className="size-4" />
+        //         ) : (
+        //           <XCircle className="size-4" />
+        //         )}
+        //         {item.correct ? "Correct" : "Incorrect"}
+        //       </span>
+        //     </div>
+        //   ))}
+        // </div>
         <div className="divide-y divide-line">
           {rows.map((item) => (
             <div
-              className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:px-6"
+              className="group flex flex-col gap-3 p-4 transition-colors hover:bg-black/2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-4 sm:px-6"
               key={item.id}
             >
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex -space-x-2">
+              {/* Match info */}
+              <div className="md:flex hidden min-w-0 items-center gap-3">
+                <div className="flex shrink-0 -space-x-2">
                   <TeamMark team={item.homeTeam} size="sm" />
                   <TeamMark team={item.awayTeam} size="sm" />
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-extrabold">
                     {item.homeTeam.name}{" "}
-                    <span className="text-ink-muted">v</span>{" "}
+                    <span className="font-medium text-ink-muted">v</span>{" "}
                     {item.awayTeam.name}
                   </p>
-                  <p className="mt-0.5 text-[0.65rem] text-ink-muted">
-                    {item.leagueName} · Pick {item.predicted.label}{" "}
+                  <p className="mt-0.5 truncate text-[0.65rem] text-ink-muted">
+                    {item.leagueName}
+                    <span className="mx-1">·</span>
+                    Pick {item.predicted.label} ·{" "}
                     {percentage(item.predicted.probability)}
                   </p>
                 </div>
               </div>
-              <p className="text-lg font-black tabular-nums">
-                {item.score.home}–{item.score.away}
-              </p>
-              <span
-                className={`flex items-center gap-1.5 text-xs font-extrabold ${item.correct ? "text-brand-strong" : "text-danger"}`}
-              >
-                {item.correct ? (
-                  <CheckCircle2 className="size-4" />
-                ) : (
-                  <XCircle className="size-4" />
-                )}
-                {item.correct ? "Correct" : "Incorrect"}
-              </span>
+              {/* Match info mobile view */}
+              <div className="flex md:hidden items-center gap-3">
+                <div className="items-start justify-start flex">
+                  <TeamMark team={item.homeTeam} size="lg" />
+                </div>
+                <div className="text-center w-full">
+                  <p className="truncate text-sm font-extrabold">
+                    {item.homeTeam.name}{" "}
+                    <span className="font-medium text-ink-muted"> vs </span>{" "}
+                    {item.awayTeam.name}
+                  </p>
+                  <p className="mt-0.5 truncate text-[0.65rem] text-ink-muted">
+                    {item.leagueName}
+                    <span className="mx-1">·</span>
+                    Pick {item.predicted.label} ·{" "}
+                    {percentage(item.predicted.probability)}
+                  </p>
+                  {/* scores section */}
+                  <div>
+                    <p className="text-lg font-black tabular-nums sm:text-center sm:min-w-[3.5rem]">
+                      {item.score.home} – {item.score.away}
+                    </p>
+                  </div>
+                </div>
+                <div className="items-end justify-end flex">
+                  <TeamMark team={item.awayTeam} size="lg" />
+                </div>
+              </div>
+
+              {/* Score + status */}
+              <div className="flex items-center justify-center md:justify-between gap-3 pl-[calc(2rem+0.75rem)] sm:justify-end sm:gap-4 sm:pl-0">
+                <p className="text-lg hidden md:block font-black tabular-nums sm:text-center sm:min-w-[3.5rem]">
+                  {item.score.home} – {item.score.away}
+                </p>
+                <p className="text-xs md:hidden font-black tabular-nums sm:text-center sm:min-w-[3.5rem]">
+                  Pre results
+                </p>
+                <span
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-extrabold sm:justify-self-end ${
+                    item.correct
+                      ? "bg-brand-strong/10 text-brand-strong"
+                      : "bg-danger/10 text-danger"
+                  }`}
+                >
+                  {item.correct ? (
+                    <CheckCircle2 className="size-3.5" />
+                  ) : (
+                    <XCircle className="size-3.5" />
+                  )}
+                  {item.correct ? "Correct" : "Incorrect"}
+                </span>
+              </div>
             </div>
           ))}
         </div>
