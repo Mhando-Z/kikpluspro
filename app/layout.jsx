@@ -3,7 +3,7 @@ import "./globals.css";
 import { Suspense } from "react";
 import { AppProviders } from "@/components/AppProviders";
 import { AppShell } from "@/components/layout/AppShell";
-import GoogleAnalytics from "@/components/GoogleAnalytics";
+import Script from "next/script";
 
 const SITE_URL = "https://kikpulsepro.vercel.app";
 const SITE_NAME = "KickPulse Football Hub";
@@ -141,7 +141,19 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <GoogleAnalytics />
+        {/* Google tag (gtag.js) */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-QXRZVL0JXK"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-QXRZVL0JXK');
+          `}
+        </Script>
         <StructuredData />
         <AppProviders>
           <Suspense fallback={<div className="min-h-screen bg-canvas" />}>
