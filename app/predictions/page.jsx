@@ -45,6 +45,7 @@ export default function PredictionsPage() {
           </div>
         }
       />
+      {/* prediction reports section */}
       <AutomatedForecasts />
       <section className="grid gap-4 md:grid-cols-3">
         <article className="surface-flat p-5">
