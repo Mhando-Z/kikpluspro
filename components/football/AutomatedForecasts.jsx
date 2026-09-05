@@ -885,7 +885,7 @@ export function AutomatedForecasts() {
 
       {forecasted.length ? (
         <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-          {forecasted.map((fixture, index) => (
+          {forecasted?.map((fixture, index) => (
             <ForecastCard
               fixture={fixture}
               index={index}

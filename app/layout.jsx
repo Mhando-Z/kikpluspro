@@ -66,7 +66,7 @@ export const metadata = {
     locale: "en_US",
     images: [
       {
-        url: "/public/kispluslogo.png", // 1200x630 recommended
+        url: "https://inpdtdlijpglmifrebbg.supabase.co/storage/v1/object/public/images/logos/kispluslogo.png", // 1200x630 recommended
         width: 512,
         height: 512,
         alt: "KickPulse Football Hub — AI forecasting dashboard preview",
@@ -79,7 +79,9 @@ export const metadata = {
     card: "summary_large_image",
     title: `${SITE_NAME} — Explainable Football AI Forecasting`,
     description: SITE_DESCRIPTION,
-    images: ["/public/kispluslogo.png"], // 1200x630 recommended
+    images: [
+      "https://inpdtdlijpglmifrebbg.supabase.co/storage/v1/object/public/images/logos/kispluslogo.png",
+    ], // 1200x630 recommended
     site: "@kickpulse", // update or remove if no handle
     creator: "@kickpulse", // update or remove if no handle
   },
