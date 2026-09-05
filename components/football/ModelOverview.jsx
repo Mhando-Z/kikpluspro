@@ -43,23 +43,29 @@ function MetricCard({ icon: Icon, label, value, detail, tone, index }) {
   };
   return (
     <motion.article
-      className="surface-flat p-4 sm:p-5"
+      className="surface-flat gap-2 justify-between flex md:flex-col p-4 sm:p-5"
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04, duration: 0.25 }}
     >
-      <span
-        className={`flex size-10 items-center justify-center rounded-2xl ${tones[tone]}`}
-      >
-        <Icon className="size-4.5" />
-      </span>
-      <p className="mt-5 text-[0.65rem] font-extrabold uppercase tracking-[0.12em] text-ink-muted">
-        {label}
-      </p>
-      <p className="mt-1 text-2xl font-black tracking-[-0.04em] sm:text-3xl">
-        {value}
-      </p>
-      <p className="mt-1 text-xs leading-5 text-ink-muted">{detail}</p>
+      <div>
+        <span
+          className={`flex size-10 items-center justify-center rounded-2xl ${tones[tone]}`}
+        >
+          <Icon className="size-4.5" />
+        </span>
+        <p className="mt-5 text-[0.65rem] font-extrabold uppercase tracking-[0.12em] text-ink-muted">
+          {label}
+        </p>
+      </div>
+      <div>
+        <p className="mt-1 text-2xl font-black tracking-[-0.04em] sm:text-3xl">
+          {value}
+        </p>
+        <p className="mt-1 w-42 md:w-full text-xs leading-5 text-ink-muted">
+          {detail}
+        </p>
+      </div>
     </motion.article>
   );
 }
@@ -504,7 +510,7 @@ export function ModelOverview() {
   );
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-7 overflow-x-hidden">
       <PageIntro
         eyebrow="AI performance command center"
         title="Measure the model, not the marketing."
