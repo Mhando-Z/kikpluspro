@@ -507,7 +507,7 @@ export function ModelOverview() {
     <div className="space-y-7">
       <PageIntro
         eyebrow="AI performance command center"
-        title="Measure the model—not the marketing."
+        title="Measure the model, not the marketing."
         description="Track every automatic forecast from prediction through final result, compare reliability by league and inspect whether confidence levels deserve trust."
         actions={
           <>
