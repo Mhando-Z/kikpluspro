@@ -457,7 +457,7 @@ function RecentResults({ rows }) {
               </div>
 
               {/* Score + status */}
-              <div className="flex items-center justify-center md:justify-between gap-3 pl-[calc(2rem+0.75rem)] sm:justify-end sm:gap-4 sm:pl-0">
+              <div className="flex w-48 items-center justify-center md:justify-between gap-3 pl-[calc(2rem+0.75rem)] sm:justify-end sm:gap-4 sm:pl-0">
                 <p className="text-lg hidden md:block font-black tabular-nums sm:text-center sm:min-w-[3.5rem]">
                   {item.score.home} – {item.score.away}
                 </p>
