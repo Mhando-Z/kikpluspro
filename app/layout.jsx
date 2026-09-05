@@ -3,6 +3,7 @@ import "./globals.css";
 import { Suspense } from "react";
 import { AppProviders } from "@/components/AppProviders";
 import { AppShell } from "@/components/layout/AppShell";
+import GoogleAnalytics from "@/components/GoogleAnalytics";
 
 const SITE_URL = "https://kikpulsepro.vercel.app";
 const SITE_NAME = "KickPulse Football Hub";
@@ -140,6 +141,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
+        <GoogleAnalytics />
         <StructuredData />
         <AppProviders>
           <Suspense fallback={<div className="min-h-screen bg-canvas" />}>
