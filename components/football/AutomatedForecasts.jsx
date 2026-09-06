@@ -381,7 +381,7 @@ function PredictionReport({ fixture, model, onClose }) {
 
   return createPortal(
     <motion.div
-      className="fixed inset-0 z-[90] overflow-y-auto bg-[#020806]/75 p-3 backdrop-blur-md sm:p-6"
+      className="fixed inset-0 z-90 overflow-y-auto bg-[#020806]/75 p-3 backdrop-blur-md sm:p-6"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

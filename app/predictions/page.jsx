@@ -47,6 +47,8 @@ export default function PredictionsPage() {
       />
       {/* prediction reports section */}
       <AutomatedForecasts />
+
+      {/* Report Section */}
       <section className="grid gap-4 md:grid-cols-3">
         <article className="surface-flat p-5">
           <MousePointerClick className="size-5 text-brand-strong" />
