@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   parseFixtureFeed,
+  parseResultFeed,
   seasonStartForDate,
   zonedLocalToUtc,
 } from "../../lib/football-ai/fixtures.js";
@@ -54,4 +55,28 @@ test("fixture feed excludes fixtures that kicked off earlier today", () => {
   assert.equal(fixtures.length, 1);
   assert.equal(fixtures[0].league_code, "SP1");
   assert.equal(fixtures[0].kickoff_at, "2026-08-30T20:00:00.000Z");
+});
+
+test("current-season result CSV becomes a finished canonical fixture", () => {
+  const csv = [
+    "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG,FTR,AvgCH,AvgCD,AvgCA",
+    "E0,30/08/2026,16:30,Arsenal,Chelsea,2,1,H,1.75,3.80,5.00",
+    "E0,20/09/2026,15:00,Liverpool,Everton,,,,1.40,4.80,7.20",
+  ].join("\n");
+  const fixtures = parseResultFeed(csv, "E0", 2026, {
+    dateFrom: "2026-08-01",
+    dateTo: "2026-09-10",
+    sourceLastModified: "2026-09-10T08:00:00.000Z",
+  });
+
+  assert.equal(fixtures.length, 1);
+  assert.equal(fixtures[0].source_key, "football-data-uk");
+  assert.equal(fixtures[0].status, "finished");
+  assert.equal(fixtures[0].result, "H");
+  assert.equal(fixtures[0].home_goals, 2);
+  assert.equal(fixtures[0].market_home_odds, 1.75);
+  assert.equal(
+    fixtures[0].canonical_fixture_key,
+    "E0|2026-08-30|football-data:england:arsenal|football-data:england:chelsea",
+  );
 });

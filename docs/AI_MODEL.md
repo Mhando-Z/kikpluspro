@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The production model estimates match-result and score probabilities without depending on a paid current-season API. It uses public completed-match CSVs from Football-Data.co.uk, optionally enriches historical rows during a temporary TheStatsAPI trial, stores them in Supabase, and trains entirely in JavaScript.
+The production model estimates match-result and score probabilities without depending on a paid current-season API. It uses public completed-match CSVs from Football-Data.co.uk, retains previously collected enrichment in Supabase, and trains entirely in JavaScript. TheStatsAPI is no longer called.
 
 This is a probabilistic analytical product. It does not guarantee an outcome and must not be described as certain betting advice.
 
@@ -10,12 +10,12 @@ This is a probabilistic analytical product. It does not guarantee an outcome and
 
 1. `scripts/football-ai/import-football-data.mjs` downloads selected league-season CSVs directly from the source and upserts normalized matches into Supabase.
 2. `scripts/football-ai/train-baseline.mjs` trains one requested domestic family at a time. Big Five and expansion matches never share model state, parameters or calibration.
-3. `scripts/football-ai/import-thestatsapi.mjs` temporarily archives advanced historical payloads and links normalized xG/statistics to matching Football-Data rows.
+3. Archived TheStatsAPI payloads supply historical xG/statistics when present; the trainer falls back to goal-derived features for new rows.
 4. `app/api/ai/model/route.js` exposes safe model metadata and supported teams.
 5. `app/api/ai/predict/route.js` loads the active server-side artifact and calculates a forecast. Optional auditing records the input features and output.
-6. `scripts/football-ai/refresh-current-results.mjs` imports every completed current-season match so learning does not depend on whether a fixture was previously tracked.
-7. `scripts/football-ai/sync-upcoming.mjs` imports the public current-fixture feed, reconstructs post-training form, and stores one automatic forecast per active-model fixture.
-8. `scripts/football-ai/settle-predictions.mjs` imports published final scores, settles stored forecasts, and makes the new matches available to later prediction runs.
+6. `scripts/football-ai/refresh-current-results.mjs` imports completed domestic matches from Football-Data.co.uk current-season CSVs, with Football-Data.org/OpenLigaDB fallback; UCL keeps its specialist providers.
+7. `scripts/football-ai/sync-upcoming.mjs` performs one provider fetch, archives recent results, settles old forecasts, reconstructs post-training form, and stores one automatic forecast per future fixture.
+8. `scripts/football-ai/settle-predictions.mjs` runs the same provider-neutral result path over a wider past window without generating forecasts.
 9. `app/api/ai/fixtures/route.js` exposes upcoming forecasts and calculated live performance without exposing the model artifact.
 10. `app/api/ai/performance/route.js` aggregates every active-model prediction into correct, incorrect, pending, per-league, confidence and monthly metrics.
 11. `app/api/ai/results/route.js` safely resolves saved fixture IDs so the browser-only tracker can settle local records.
@@ -23,7 +23,7 @@ This is a probabilistic analytical product. It does not guarantee an outcome and
 13. `app/tracker/page.jsx` keeps user-entered decisions in IndexedDB rather than Supabase.
 14. `scripts/football-ai/import-ucl-history.mjs` imports CC0 Champions League history and normalizes European club identities.
 15. `scripts/football-ai/train-ucl.mjs` creates a separately versioned UCL specialist, incorporates linked historical xG/statistics, and evaluates it only on chronological UCL matches.
-16. `lib/thestatsapi/ucl-fixtures.js` supplies current UCL fixtures/results/crests during the trial; Football-Data.org is the automatic fallback.
+16. `lib/football-ai/provider-fixtures.js` routes Football-Data.co.uk as the domestic primary, Football-Data.org as the domestic fallback/UCL primary, and OpenLigaDB as the final verified fallback.
 17. `scripts/football-ai/sync-upcoming.mjs` selects the active model by competition code: the Big Five use `elo-poisson-global`, `E1`/`B1`/`SC0` use `domestic-expansion`, and `CL` uses the UCL specialist.
 
 API-Football remains the visual identity source. The AI routes read cached rows
@@ -99,18 +99,13 @@ Reported metrics are accuracy, multiclass log loss, multiclass Brier score, goal
 ```bash
 npm run ai:import:dry -- --seasons=2024,2025 --leagues=E0,SP1
 npm run ai:import -- --from=2010 --to=2025
-npm run ai:leagues:coverage
 npm run ai:leagues:import:dry -- --seasons=2018,2019,2020,2021,2022,2023,2024,2025
 npm run ai:leagues:import -- --seasons=2018,2019,2020,2021,2022,2023,2024,2025
-npm run ai:leagues:enrich:sample
-npm run ai:leagues:enrich -- --seasons=2018,2019,2020,2021,2022,2023,2024,2025
 npm run ai:train:big-five:candidate -- --validation-season=2024 --test-season=2025
 npm run ai:train:expansion:candidate -- --validation-season=2024 --test-season=2025
 npm run ai:model:activate -- --model-key=domestic-expansion --version=1
 npm run ai:train:features
 npm run ai:ucl:import -- --from=2011 --to=2025
-npm run ai:ucl:enrich:sample -- --seasons=2024
-npm run ai:ucl:enrich -- --seasons=2022,2023,2024,2025
 npm run ai:ucl:train
 npm run ai:fixtures:dry
 npm run ai:fixtures:sync
@@ -120,26 +115,31 @@ npm run ai:fixtures:update
 
 Use `--validation-season=2024 --test-season=2025` with either domestic training command to choose explicit splits. The season value means the starting year: `2025` is the 2025/26 campaign.
 
-Re-running either importer is safe because source identifiers are deterministic and TheStatsAPI payloads are skipped once archived. Each training run creates a new immutable version. Automatic promotion occurs only when held-out log loss improves without a material Brier-score regression.
+Re-running an active importer is safe because source identifiers are deterministic. Archived enrichment is read locally from Supabase and never refreshed. Each training run creates a new immutable version. Automatic promotion occurs only when held-out log loss improves without a material Brier-score regression.
 
 Set `AI_AUDIT_PREDICTIONS=true` only when you intentionally want to store public simulator requests. It defaults to `false`; add authentication or durable rate limiting before enabling it on a public deployment.
 
 ## Current-fixture lifecycle
 
-`ai:fixtures:sync` reads `fixtures.csv`, keeps only the eight supported domestic leagues,
-converts source times from Europe/London to UTC, upserts teams and fixtures, and
-creates deterministic prediction audit rows. Re-running it updates the same
-fixture and prediction records.
+`ai:fixtures:sync` downloads Football-Data.co.uk's shared domestic fixture file
+once, then reads the relevant current-season result CSV for each domestic
+league. Football-Data.org is used only when the primary fixture/result source
+is unavailable or has no scheduled matches in the requested window.
+OpenLigaDB is the final verified fallback. The workflow normalizes kickoffs to
+UTC, upserts by provider-neutral identity, settles completed predictions and
+creates deterministic forecast audit rows. Re-running it updates the same
+fixture and prediction records; an empty or failed provider response never
+deletes stored fixtures.
 
 Big Five fixtures are routed to their isolated active model; Championship,
 Belgian and Scottish fixtures are routed to the expansion model. One family
 cannot change another family's team ratings, league baselines or probability
 calibration.
 
-When `THESTATSAPI_KEY` is configured, the same command prefers its Champions
-League feed. On provider failure or after the trial key is removed, it uses the
-Football-Data.org `CL` endpoint. A provider-neutral fixture key prevents the
-same match being duplicated when the source changes. Each fixture is routed by
+Football-Data.org supplies Champions League fixtures and results; OpenLigaDB is
+the fallback for a verified UCL season. Football-Data.co.uk supplies all eight
+supported domestic leagues, including `B1` and `SC0`. A provider-neutral fixture key prevents
+the same match being duplicated when the source changes. Each fixture is routed by
 `league_code` to its own active `model_key`; a missing specialist causes a
 visible skip, never a domestic-model fallback. UCL stage, format era, leg and
 neutral-venue context are retained in fixtures and prediction snapshots.
@@ -154,10 +154,9 @@ forecast that league. A missing expansion model cannot fall back to the Big
 Five artifact and a missing UCL model cannot fall back to either domestic
 family.
 
-`ai:fixtures:settle` checks domestic fixtures against the current season result
-CSV and UCL fixtures against the preferred/fallback provider. A natural match
-key prevents a UCL result already imported from OpenFootball or another feed
-from being added twice. It attaches the actual result to every pre-match
+`ai:fixtures:settle` checks fixtures against the same provider-neutral current
+result service. A natural match key prevents a result already imported from a
+historical source from being added twice. It attaches the actual result to every pre-match
 prediction; only those settled records enter accuracy, log loss and Brier score.
 
 Use an external scheduler such as GitHub Actions, a server cron job or a hosting

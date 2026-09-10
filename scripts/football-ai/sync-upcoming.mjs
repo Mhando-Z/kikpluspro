@@ -1,14 +1,22 @@
 import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import { fetchFixtureFeed, syncFixtureFeed } from "../../lib/football-ai/fixtures.js";
 import {
   AI_MODEL_KEY,
+  FOOTBALL_DATA_LEAGUES,
   modelFamilyForKey,
   modelKeyForCompetition,
+  UCL_COMPETITION_CODE,
   UCL_MODEL_KEY,
 } from "../../lib/football-ai/constants.js";
-import { fetchUclFixtures, syncUclFixtures } from "../../lib/football-ai/ucl-fixtures.js";
-import { fetchStatsApiUclFixtures, syncStatsApiUclFixtures } from "../../lib/thestatsapi/ucl-fixtures.js";
+import {
+  fetchProviderFixtures,
+  providerSummary,
+  syncProviderFixtures,
+} from "../../lib/football-ai/provider-fixtures.js";
+import {
+  archiveFinishedFixtures,
+  settleFinishedPredictions,
+} from "../../lib/football-ai/provider-results.js";
 import {
   cloneModelState,
   predictMatch,
@@ -23,12 +31,21 @@ function argumentsOf(values) {
   }));
 }
 
-function positiveInteger(value, fallback) {
+function positiveInteger(value, fallback, label = "days", maximum = 60) {
   const parsed = Number(value ?? fallback);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 60) {
-    throw new Error("--days must be an integer between 1 and 60.");
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > maximum) {
+    throw new Error(`--${label} must be an integer between 0 and ${maximum}.`);
   }
   return parsed;
+}
+
+function requestedLeagues(value) {
+  const supported = [...Object.keys(FOOTBALL_DATA_LEAGUES), UCL_COMPETITION_CODE];
+  if (!value) return supported;
+  const codes = String(value).split(",").map((code) => code.trim().toUpperCase()).filter(Boolean);
+  const unknown = codes.filter((code) => !supported.includes(code));
+  if (unknown.length) throw new Error(`Unsupported fixture competitions: ${unknown.join(", ")}`);
+  return [...new Set(codes)];
 }
 
 function fixturePredictionKey(modelId, fixtureId) {
@@ -110,46 +127,31 @@ function countsByLeague(fixtures) {
     .map(([code, rows]) => `${code}: ${rows.length}`).join(", ") || "none";
 }
 
-async function preferredUclFeed({ supabase = null, days, pastDays = 0 } = {}) {
-  const attempts = [];
-  if (process.env.THESTATSAPI_KEY) {
-    try {
-      return supabase
-        ? await syncStatsApiUclFixtures(supabase, { days, pastDays })
-        : await fetchStatsApiUclFixtures({ days, pastDays });
-    } catch (error) {
-      attempts.push(`TheStatsAPI: ${error instanceof Error ? error.message : String(error)}`);
-    }
+function printProviderWarnings(feed) {
+  for (const error of feed.errors) {
+    console.warn(`${error.leagueCode} ${error.provider}: ${error.message}`);
   }
-  if (process.env.FOOTBALL_DATA_ORG_API_KEY) {
-    try {
-      return supabase
-        ? await syncUclFixtures(supabase, { days, pastDays })
-        : await fetchUclFixtures({ days, pastDays });
-    } catch (error) {
-      attempts.push(`Football-Data.org: ${error instanceof Error ? error.message : String(error)}`);
-    }
+  if (feed.unavailable.length) {
+    console.warn(`No current provider is configured for: ${feed.unavailable.join(", ")}. Existing stored fixtures were retained.`);
   }
-  if (attempts.length) console.warn(`UCL providers unavailable. ${attempts.join(" | ")}`);
-  return null;
 }
 
-async function dryRun(days) {
-  const domestic = await fetchFixtureFeed({ days });
-  const ucl = await preferredUclFeed({ days });
-  const fixtures = [...domestic.fixtures, ...(ucl?.fixtures ?? []).filter((row) => row.status === "scheduled")];
-  console.log(`Validated ${fixtures.length} future supported fixtures for the next ${days} days.`);
-  console.log(`By competition: ${countsByLeague(fixtures)}`);
-  console.log(`Domestic source last modified: ${domestic.sourceLastModified ?? "not supplied"}`);
-  console.log(`Domestic source: ${domestic.url}`);
-  if (ucl) console.log(`UCL source: ${ucl.providerName} (${ucl.dateFrom} to ${ucl.dateTo})`);
-  else console.log("UCL source skipped: configure THESTATSAPI_KEY or FOOTBALL_DATA_ORG_API_KEY.");
+async function dryRun({ days, pastDays, leagueCodes }) {
+  const feed = await fetchProviderFixtures({ days, pastDays, leagueCodes });
+  const scheduled = feed.fixtures.filter((fixture) => fixture.status === "scheduled" && new Date(fixture.kickoff_at) > new Date());
+  const finished = feed.fixtures.filter((fixture) => fixture.status === "finished");
+  console.log(`Validated ${scheduled.length} future fixtures and ${finished.length} recent results (${feed.dateFrom} to ${feed.dateTo}).`);
+  console.log(`By competition: ${countsByLeague(feed.fixtures)}`);
+  console.log(`Provider routing: ${providerSummary(feed)}`);
+  printProviderWarnings(feed);
 }
 
 async function main() {
   const args = argumentsOf(process.argv.slice(2));
   const days = positiveInteger(args.days, 14);
-  if (args["dry-run"]) return dryRun(days);
+  const pastDays = positiveInteger(args["past-days"], 7, "past-days", 370);
+  const leagueCodes = requestedLeagues(args.leagues);
+  if (args["dry-run"]) return dryRun({ days, pastDays, leagueCodes });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -160,8 +162,9 @@ async function main() {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const domesticFeed = await syncFixtureFeed(supabase, { days });
-  const uclFeed = await preferredUclFeed({ supabase, days, pastDays: 7 });
+  const feed = await syncProviderFixtures(supabase, { days, pastDays, leagueCodes });
+  const archive = await archiveFinishedFixtures(supabase, feed.fixtures);
+  const settlement = await settleFinishedPredictions(supabase, feed.storedFixtures);
   const models = await activeModels(supabase);
   const states = new Map();
   const applied = new Map();
@@ -196,9 +199,11 @@ async function main() {
   }
   if (rows.length) await upsertPredictions(supabase, rows);
 
-  console.log(`Synced ${domesticFeed.fixtures.length} domestic fixtures and ${domesticFeed.teams} team records.`);
-  if (uclFeed) console.log(`Synced ${uclFeed.fixtures.length} UCL fixtures/results and ${uclFeed.teams} team records from ${uclFeed.providerName}.`);
-  else console.log("UCL sync skipped because neither preferred nor fallback provider is available.");
+  console.log(`Synced ${feed.fixtures.length} fixtures/results and ${feed.teams} team records.`);
+  console.log(`Provider routing: ${providerSummary(feed)}`);
+  console.log(`Archived ${archive.written} new/corrected results; skipped ${archive.skippedExisting} canonical duplicates.`);
+  console.log(`Settled ${settlement.settled} stored pre-match predictions without changing their probabilities.`);
+  printProviderWarnings(feed);
   const forecasted = fixtures.filter((fixture) => !skipped.includes(fixture));
   console.log(`Generated ${rows.length} competition-routed forecasts. By competition: ${countsByLeague(forecasted)}`);
   for (const [modelKey, model] of models) {

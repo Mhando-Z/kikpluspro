@@ -1,16 +1,17 @@
 import { createClient } from "@supabase/supabase-js";
-import { FOOTBALL_DATA_LEAGUES } from "../../lib/football-ai/constants.js";
+import {
+  FOOTBALL_DATA_LEAGUES,
+  UCL_COMPETITION_CODE,
+} from "../../lib/football-ai/constants.js";
 import { seasonStartForDate } from "../../lib/football-ai/fixtures.js";
 import {
-  aliasesFrom,
-  fetchSeason,
-  teamsFrom,
-  transformRow,
-  upsertBatches,
-} from "./import-football-data.mjs";
-
-const SOURCE_KEY = "football-data-uk";
-const DEFAULT_BASE_URL = "https://www.football-data.co.uk/mmz4281";
+  providerSummary,
+  syncProviderFixtures,
+} from "../../lib/football-ai/provider-fixtures.js";
+import {
+  archiveFinishedFixtures,
+  settleFinishedPredictions,
+} from "../../lib/football-ai/provider-results.js";
 
 function argumentsOf(values) {
   return Object.fromEntries(values.map((value) => {
@@ -19,15 +20,29 @@ function argumentsOf(values) {
   }));
 }
 
+function leagueCodesFrom(value) {
+  const supported = [...Object.keys(FOOTBALL_DATA_LEAGUES), UCL_COMPETITION_CODE];
+  if (!value) return supported;
+  const codes = String(value).split(",").map((code) => code.trim().toUpperCase()).filter(Boolean);
+  const unknown = codes.filter((code) => !supported.includes(code));
+  if (unknown.length) throw new Error(`Unsupported result competitions: ${unknown.join(", ")}`);
+  return [...new Set(codes)];
+}
+
+function campaignPastDays(today, seasonStart) {
+  const campaignStart = new Date(`${seasonStart}-07-01T00:00:00.000Z`);
+  const end = new Date(`${today}T23:59:59.999Z`);
+  return Math.max(1, Math.min(370, Math.ceil((end.getTime() - campaignStart.getTime()) / 86_400_000)));
+}
+
 async function main() {
   const args = argumentsOf(process.argv.slice(2));
   const today = String(args.date ?? new Date().toISOString().slice(0, 10));
   const seasonStart = Number(args.season ?? seasonStartForDate(today));
-  const leagueCodes = String(args.leagues ?? Object.keys(FOOTBALL_DATA_LEAGUES).join(","))
-    .split(",").map((value) => value.trim().toUpperCase()).filter(Boolean);
-  const unknown = leagueCodes.filter((code) => !FOOTBALL_DATA_LEAGUES[code]);
-  if (unknown.length) throw new Error(`Unknown league codes: ${unknown.join(", ")}`);
-
+  if (!Number.isInteger(seasonStart) || seasonStart < 1900 || seasonStart > 2200) {
+    throw new Error(`Invalid season start: ${args.season}`);
+  }
+  const leagueCodes = leagueCodesFrom(args.leagues);
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) {
@@ -36,52 +51,23 @@ async function main() {
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const baseUrl = String(process.env.FOOTBALL_DATA_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/$/, "");
-  const { data: run, error: runError } = await supabase.from("ai_import_runs").insert({
-    source_key: SOURCE_KEY,
-    requested_leagues: leagueCodes,
-    requested_seasons: [seasonStart],
-    metadata: { mode: "current-season-refresh", today, baseUrl },
-  }).select("id").single();
-  if (runError) throw new Error(runError.message);
 
-  const matches = [];
-  let filesProcessed = 0;
-  try {
-    for (const leagueCode of leagueCodes) {
-      const league = FOOTBALL_DATA_LEAGUES[leagueCode];
-      const result = await fetchSeason(baseUrl, leagueCode, seasonStart);
-      if (result.unavailable) {
-        console.warn(`Current-season file not available yet: ${result.url}`);
-        continue;
-      }
-      const completed = result.rows.map((row) => transformRow(row, league, seasonStart)).filter(Boolean);
-      matches.push(...completed);
-      filesProcessed += 1;
-      console.log(`${league.name}: ${completed.length} completed ${seasonStart}/${String(seasonStart + 1).slice(-2)} matches.`);
-    }
+  const feed = await syncProviderFixtures(supabase, {
+    now: new Date(`${today}T12:00:00.000Z`),
+    days: 1,
+    pastDays: campaignPastDays(today, seasonStart),
+    leagueCodes,
+  });
+  const archive = await archiveFinishedFixtures(supabase, feed.fixtures);
+  const settlement = await settleFinishedPredictions(supabase, feed.storedFixtures);
 
-    const teams = teamsFrom(matches);
-    await upsertBatches(supabase, "ai_teams", teams, "canonical_key");
-    await upsertBatches(supabase, "ai_team_aliases", aliasesFrom(teams), "provider,country_code,provider_name");
-    const rowsWritten = await upsertBatches(supabase, "ai_matches", matches, "source_match_key");
-    await supabase.from("ai_import_runs").update({
-      status: "succeeded",
-      files_processed: filesProcessed,
-      rows_received: matches.length,
-      rows_written: rowsWritten,
-      completed_at: new Date().toISOString(),
-    }).eq("id", run.id);
-    console.log(`Current result store refreshed with ${matches.length} completed matches.`);
-  } catch (error) {
-    await supabase.from("ai_import_runs").update({
-      status: "failed",
-      files_processed: filesProcessed,
-      rows_received: matches.length,
-      completed_at: new Date().toISOString(),
-      error_message: error instanceof Error ? error.message : String(error),
-    }).eq("id", run.id);
-    throw error;
+  console.log(`Provider routing: ${providerSummary(feed)}`);
+  console.log(`Current result store refreshed with ${archive.written} new/corrected matches.`);
+  console.log(`Skipped ${archive.skippedExisting} matches already stored from another canonical source.`);
+  console.log(`Settled ${settlement.settled} pending pre-match predictions.`);
+  for (const error of feed.errors) console.warn(`${error.leagueCode} ${error.provider}: ${error.message}`);
+  if (feed.unavailable.length) {
+    console.warn(`No current-season provider is configured for: ${feed.unavailable.join(", ")}. Existing history was retained.`);
   }
 }
 

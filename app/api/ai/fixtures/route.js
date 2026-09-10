@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { AI_MODEL_KEY, UCL_MODEL_KEY } from "@/lib/football-ai/constants";
+import { AI_MODEL_KEY } from "@/lib/football-ai/constants";
 import { getActiveModelRecords, safeModelIdentity } from "@/lib/football-ai/repository";
 import { loadCachedTeamAssetResolver } from "@/lib/api-football/team-assets";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -7,6 +7,56 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 const RESULT_INDEX = { H: 0, D: 1, A: 2 };
+
+const FIXTURE_SELECT = [
+  "id",
+  "source_key",
+  "league_code",
+  "league_name",
+  "country_code",
+  "kickoff_at",
+  "home_team_key",
+  "away_team_key",
+  "home_team_name",
+  "away_team_name",
+  "status",
+  "competition_stage",
+  "format_era",
+  "leg",
+  "neutral_venue",
+  "result",
+  "home_goals",
+  "away_goals",
+  "market_home_odds",
+  "market_draw_odds",
+  "market_away_odds",
+  "source_last_modified",
+  "source_payload",
+].join(",");
+
+// Do not select `features` here. That JSON payload is useful for auditing and
+// training, but sending it through the forecasts feed makes this request much
+// larger without adding anything to the UI.
+const PREDICTION_SELECT = [
+  "id",
+  "model_version_id",
+  "fixture_id",
+  "home_win_probability",
+  "draw_probability",
+  "away_win_probability",
+  "over_25_probability",
+  "both_teams_score_probability",
+  "expected_home_goals",
+  "expected_away_goals",
+  "confidence",
+  "top_scorelines",
+  "explanations",
+  "actual_result",
+  "actual_home_goals",
+  "actual_away_goals",
+  "settled_at",
+  "created_at",
+].join(",");
 
 function finite(value) {
   const number = Number(value);
@@ -133,7 +183,9 @@ export async function GET() {
     return NextResponse.json({ ready: false, error: "Supabase server credentials are not configured." }, { status: 503 });
   }
   const { records, error: modelError } = await getActiveModelRecords();
-  if (modelError) return NextResponse.json({ ready: false, error: modelError }, { status: 503 });
+  if (modelError) {
+    return NextResponse.json({ ready: false, stage: "models", error: modelError }, { status: 503 });
+  }
   if (!records.length) {
     return NextResponse.json({ ready: false, error: "No active model exists. Run npm run ai:train." }, { status: 404 });
   }
@@ -145,7 +197,7 @@ export async function GET() {
   to.setUTCDate(to.getUTCDate() + 60);
   const { data: fixtures, error: fixtureError } = await supabase
     .from("ai_fixtures")
-    .select("*")
+    .select(FIXTURE_SELECT)
     .gte("kickoff_at", from.toISOString())
     .lte("kickoff_at", to.toISOString())
     .order("kickoff_at", { ascending: true })
@@ -154,6 +206,7 @@ export async function GET() {
     const missingMigration = fixtureError.code === "42P01" || fixtureError.message.includes("ai_fixtures");
     return NextResponse.json({
       ready: false,
+      stage: "fixtures",
       setupRequired: missingMigration,
       error: missingMigration
         ? "Apply supabase/migrations/202608300002_prediction_tracking.sql, then sync upcoming fixtures."
@@ -166,11 +219,16 @@ export async function GET() {
   if (fixtureIds.length) {
     const { data, error } = await supabase
       .from("ai_predictions")
-      .select("*")
+      .select(PREDICTION_SELECT)
       .in("model_version_id", records.map((record) => record.id))
-      .in("fixture_id", fixtureIds);
-    if (error) return NextResponse.json({ ready: false, error: error.message }, { status: 503 });
-    predictions = data ?? [];
+      .gte("kickoff_at", from.toISOString())
+      .lte("kickoff_at", to.toISOString())
+      .limit(1000);
+    if (error) {
+      return NextResponse.json({ ready: false, stage: "predictions", error: error.message }, { status: 503 });
+    }
+    const fixtureIdSet = new Set(fixtureIds);
+    predictions = (data ?? []).filter((prediction) => fixtureIdSet.has(prediction.fixture_id));
   }
 
   const resolveTeamAsset = await loadCachedTeamAssetResolver(supabase);
@@ -191,21 +249,19 @@ export async function GET() {
     .slice(0, 20);
   const lastSourceUpdate = rows.reduce((latest, row) =>
     !row.sourceLastModified || latest >= row.sourceLastModified ? latest : row.sourceLastModified, "");
-  const hasUclModel = records.some((record) => record.model_key === UCL_MODEL_KEY);
-
   return NextResponse.json({
     ready: true,
     model: safeModelIdentity(records.find((record) => record.model_key === AI_MODEL_KEY) ?? records[0]),
     models: records.map(safeModelIdentity),
     source: {
-      name: hasUclModel ? "Football-Data.co.uk + preferred UCL feed" : "Football-Data.co.uk latest fixtures",
-      url: "https://www.football-data.co.uk/matches.php",
+      name: "Football-Data.co.uk with verified fallbacks",
+      url: "https://www.football-data.co.uk/fixtures.csv",
       lastModified: lastSourceUpdate || null,
     },
     sources: [
-      { code: "domestic", name: "Football-Data.co.uk", url: "https://www.football-data.co.uk/matches.php" },
-      { code: "CL-preferred", name: "TheStatsAPI (trial)", url: "https://www.thestatsapi.com/" },
-      { code: "CL-fallback", name: "Football-Data.org", url: "https://www.football-data.org/" },
+      { code: "domestic-primary", name: "Football-Data.co.uk", url: "https://www.football-data.co.uk/fixtures.csv" },
+      { code: "domestic-fallback", name: "Football-Data.org", url: "https://www.football-data.org/" },
+      { code: "verified-fallback", name: "OpenLigaDB", url: "https://www.openligadb.de/" },
     ],
     upcoming,
     recent,

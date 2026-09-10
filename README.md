@@ -11,7 +11,8 @@ KickPulse is a production-style football intelligence starter built with:
 - A calibrated JavaScript Elo + Poisson prediction pipeline
 - Independently trained Big Five and domestic expansion model families
 - A separately trained UEFA Champions League specialist with automatic model routing
-- Temporary TheStatsAPI historical enrichment and preferred UCL feed with a free fallback
+- Archived TheStatsAPI enrichment retained for training, with no live dependency
+- Football-Data.co.uk domestic fixtures/results with verified fallbacks
 
 It stores API-Football responses in Supabase before serving them to the Next.js
 application. One backend request can therefore supply every connected user.
@@ -63,9 +64,8 @@ by https://livescore.football-data.co.uk/. It offers All matches, In play, Not
 started and Finished views and does not consume API-Football quota.
 
 The widget is display-only. LiveXscores advertises structured data as a paid
-feed, so KickPulse does not scrape or reverse-engineer the widget. Domestic
-predictions are settled from Football-Data's season CSVs; UCL predictions use
-the preferred TheStatsAPI feed with Football-Data.org fallback:
+feed, so KickPulse does not scrape or reverse-engineer the widget. Predictions
+are settled from the provider-neutral Football-Data.co.uk/Football-Data.org/OpenLigaDB workflow:
 
 ~~~bash
 npm run ai:fixtures:settle
@@ -165,6 +165,8 @@ supabase/migrations/202608310001_sustainable_learning.sql
 supabase/migrations/202609010001_ucl_specialist.sql
 supabase/migrations/202609010002_thestatsapi_ucl.sql
 supabase/migrations/202609010003_team_assets.sql
+supabase/migrations/202609100001_current_fixture_providers.sql
+supabase/migrations/202609100002_football_data_uk_primary.sql
 ~~~
 
 Then run supabase/seed.sql.
@@ -202,11 +204,8 @@ FOOTBALL_DATA_BASE_URL=https://www.football-data.co.uk/mmz4281
 FOOTBALL_DATA_FIXTURES_URL=https://www.football-data.co.uk/fixtures.csv
 FOOTBALL_DATA_ORG_API_KEY=YOUR_SERVER_ONLY_FREE_KEY
 FOOTBALL_DATA_ORG_BASE_URL=https://api.football-data.org/v4
+OPENLIGADB_BASE_URL=https://api.openligadb.de
 OPENFOOTBALL_UCL_BASE_URL=https://raw.githubusercontent.com/openfootball/champions-league/master
-THESTATSAPI_KEY=YOUR_SERVER_ONLY_TRIAL_KEY
-THESTATSAPI_BASE_URL=https://api.thestatsapi.com/api
-THESTATSAPI_REQUESTS_PER_MINUTE=220
-THESTATSAPI_MAX_REQUESTS_PER_RUN=45000
 AI_AUDIT_PREDICTIONS=false
 ~~~
 
@@ -265,9 +264,9 @@ reference but can lag the direct source.
 
 To add the Championship, Belgian Pro League and Scottish Premiership using the
 quota-safe rollout, follow [docs/DOMESTIC_EXPANSION.md](docs/DOMESTIC_EXPANSION.md).
-The rollout first imports free base history, verifies TheStatsAPI coverage,
-enriches only linked rows and trains a separate expansion candidate without
-changing Big Five parameters or calibration.
+The rollout imports free base history and trains a separate expansion candidate
+without changing Big Five parameters or calibration. Previously collected
+enrichment remains stored in Supabase and can still be read by the trainer.
 
 Respect the data source's current terms before commercial redistribution.
 
@@ -287,11 +286,10 @@ loss, Brier score, goal error, per-league results and a market benchmark where
 closing odds exist. A completed run stores a new model version and promotes it
 only when the chronological probability-quality gate passes.
 
-Before the temporary provider trial ends, follow
-[docs/THESTATSAPI_TRIAL.md](docs/THESTATSAPI_TRIAL.md). The enrichment importer
-stores raw payloads and links match xG/statistics to the existing historical
-rows. The deployed hybrid model falls back to goal-derived performance after
-the trial and therefore does not need a permanent API subscription.
+TheStatsAPI is retired from operational workflows. Its stored raw payloads and
+normalized xG/statistics remain valid historical training inputs, while new
+matches use the model's goal-derived fallback features. Do not configure or
+schedule any TheStatsAPI importer command.
 
 To review both families without activating either candidate:
 
@@ -306,10 +304,11 @@ for the measured 7,082-match benchmark, per-league results and limitations.
 
 ## 7. Track current fixtures and results
 
-The domestic fixture feed comes from the same public Football-Data.co.uk source
-as the training data. UCL fixtures use the preferred provider/fallback strategy
-described below. Neither path consumes API-Football calls. Validate the window,
-then sync fixtures and generate predictions:
+Domestic fixtures, odds and final results use Football-Data.co.uk as the primary
+source. Football-Data.org fills missing domestic coverage and supplies UCL;
+OpenLigaDB is the final verified competition-level fallback. None of these paths
+consumes API-Football calls. Validate the window, then sync, settle finished
+predictions and generate new pre-match forecasts:
 
 ~~~bash
 npm run ai:fixtures:dry
@@ -321,31 +320,35 @@ stored after its training cutoff. This keeps current Elo and form history moving
 without changing the immutable trained model version. Newly promoted teams use
 the model's cold-start priors and are visibly marked as low confidence.
 
-After matches finish, import the published results and score the stored
-pre-match forecasts:
+To settle a wider result window without generating forecasts:
 
 ~~~bash
 npm run ai:fixtures:settle
 ~~~
 
-For a regular update, settle old fixtures first and then sync the new window:
+For a regular update, use the single rate-limit-aware workflow:
 
 ~~~bash
 npm run ai:fixtures:update
 ~~~
 
-Football-Data.co.uk normally refreshes the upcoming feed on Friday afternoons
-for weekend games and Tuesday for midweek games. Open `/predictions` to see the
-automatic forecasts and tracked live scorecard. Click any forecast card for a
-full report. The interactive simulator is available separately at `/simulator`.
+The command fetches recent results and upcoming fixtures once, archives new
+canonical results, settles predictions without modifying their original
+probabilities, updates rolling form, and creates future forecasts. Open
+`/predictions` to see the forecasts and scorecard.
+
+Football-Data.co.uk supplies all eight supported domestic competitions: `E0`,
+`E1`, `SP1`, `I1`, `D1`, `F1`, `B1` and `SC0`. Football-Data.org free coverage
+fills `E0`, `E1`, `SP1`, `I1`, `D1`, `F1` and `CL`. OpenLigaDB currently acts
+as a verified fallback for `E0`, `SP1`, `D1` and `CL`. A failed or empty feed
+never deletes stored fixtures or previously generated predictions.
 
 ### Champions League specialist
 
 KickPulse deliberately does not mix Champions League forecasts into the
 domestic model family. Historical main-competition results come from the CC0
-OpenFootball archive. During the trial, TheStatsAPI is the preferred UCL
-enrichment and current fixture/result/crest provider. Football-Data.org remains
-the automatic free fallback, so inference has no paid production dependency.
+OpenFootball archive. Current UCL fixtures/results come from Football-Data.org,
+with OpenLigaDB used only when the primary call fails.
 
 After applying both UCL migrations, run the quota-light sample before the full
 archive and training sequence:
@@ -353,8 +356,6 @@ archive and training sequence:
 ~~~bash
 npm run ai:ucl:import:dry -- --from=2011 --to=2025
 npm run ai:ucl:import -- --from=2011 --to=2025
-npm run ai:ucl:enrich:sample -- --seasons=2024
-npm run ai:ucl:enrich -- --seasons=2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025
 npm run ai:ucl:train
 npm run ai:fixtures:sync
 ~~~
@@ -366,10 +367,9 @@ fixture sync routes `CL` to `uefa-champions-league`, the Big Five to
 family is missing, its fixtures are skipped rather than silently predicted by
 the wrong model.
 
-TheStatsAPI payloads are stored idempotently in Supabase. Odds are retained for
-evaluation and never used as match outcomes. Post-match xG/statistics can only
-affect later fixtures. Remove `THESTATSAPI_KEY` when the trial ends; fixture
-sync and settlement then fall back to Football-Data.org automatically.
+Archived TheStatsAPI payloads remain idempotent historical evidence. Their odds
+are retained for evaluation and never used as outcomes. No current fixture,
+result, settlement or scheduled-learning command calls TheStatsAPI.
 
 See [docs/UCL_SPECIALIST.md](docs/UCL_SPECIALIST.md) for the full data,
 training, routing and operating guide.

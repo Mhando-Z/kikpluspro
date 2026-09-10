@@ -18,18 +18,18 @@ at the same time and keep separate performance records.
 
 ## Source strategy
 
-| Purpose | Preferred source | Long-term fallback |
+| Purpose | Active source | Fallback/archive |
 | --- | --- | --- |
 | Historical UCL results and stage context | OpenFootball CC0 archive | Retained permanently in Supabase |
-| Historical xG, stats, odds and rich match payloads | TheStatsAPI during the trial | Retained archive; no future calls required |
-| Current UCL fixtures, results and crests | TheStatsAPI while a key is configured | Football-Data.org free `CL` endpoint |
+| Historical xG, stats, odds and rich match payloads | Existing Supabase archive | No future provider calls |
+| Current UCL fixtures, results and crests | Football-Data.org free `CL` endpoint | Verified OpenLigaDB UCL season |
 | Shared domestic club strength | Football-Data.co.uk domestic history | Existing Supabase match archive |
 
-TheStatsAPI is a temporary teacher and preferred current feed, not a permanent
-runtime dependency. Every raw enrichment payload is archived under its provider
-match ID. A provider-neutral fixture key prevents duplicate fixtures when the
-current feed changes. Settlement also checks the natural match identity before
-adding a result to training, so one game cannot be learned twice.
+TheStatsAPI is retired. Its already collected payloads remain historical
+training evidence, but no current command authenticates to or calls it. A
+provider-neutral fixture key prevents duplicate fixtures when the current feed
+changes. Settlement also checks the natural match identity before adding a
+result to training, so one game cannot be learned twice.
 
 Review each provider's current retention and model-training terms before a
 large import. Provider credentials and the model artifact remain server-only.
@@ -41,23 +41,21 @@ Apply both migrations after the base AI migrations:
 ```text
 supabase/migrations/202609010001_ucl_specialist.sql
 supabase/migrations/202609010002_thestatsapi_ucl.sql
+supabase/migrations/202609100001_current_fixture_providers.sql
+supabase/migrations/202609100002_football_data_uk_primary.sql
 ```
 
 Add these server-only values to `.env.local`:
 
 ```bash
-THESTATSAPI_KEY=YOUR_TRIAL_KEY
-THESTATSAPI_BASE_URL=https://api.thestatsapi.com/api
-THESTATSAPI_REQUESTS_PER_MINUTE=220
-THESTATSAPI_MAX_REQUESTS_PER_RUN=45000
-FOOTBALL_DATA_ORG_API_KEY=YOUR_FREE_FALLBACK_KEY
+FOOTBALL_DATA_FIXTURES_URL=https://www.football-data.co.uk/fixtures.csv
+FOOTBALL_DATA_BASE_URL=https://www.football-data.co.uk/mmz4281
+FOOTBALL_DATA_ORG_API_KEY=YOUR_SERVER_ONLY_FREE_KEY
 FOOTBALL_DATA_ORG_BASE_URL=https://api.football-data.org/v4
+OPENLIGADB_BASE_URL=https://api.openligadb.de
 ```
 
-If automatic name discovery cannot find the competition for your account,
-inspect the competition response and set `THESTATSAPI_UCL_COMPETITION_ID`.
-
-## Import and enrich
+## Import the historical backbone
 
 First import the CC0 result backbone. Season values are starting years, so
 `2025` means 2025/26.
@@ -67,37 +65,10 @@ npm run ai:ucl:import:dry -- --from=2011 --to=2025
 npm run ai:ucl:import -- --from=2011 --to=2025
 ```
 
-Validate authentication, competition discovery and match linking with 25
-matches before spending the trial allowance:
-
-```bash
-npm run ai:ucl:enrich:sample -- --seasons=2024
-```
-
-Then archive the high-value normalized features. Start with recent seasons and
-expand backward while monitoring the CLI request counter and link rate:
-
-```bash
-npm run ai:ucl:enrich -- --seasons=2022,2023,2024,2025
-npm run ai:ucl:enrich -- --seasons=2015,2016,2017,2018,2019,2020,2021
-```
-
-The normalized rows include xG/npxG, shots, shots on target, big chances,
+Previously archived normalized rows include xG/npxG, shots, shots on target, big chances,
 penalty-area touches, final-third entries, possession, corners, fouls, cards
-and 1X2 prices where supplied. Rich endpoints can be archived for later model
-research after the high-value import succeeds:
-
-```bash
-npm run ai:ucl:archive -- --seasons=2022,2023,2024,2025
-```
-
-Re-running an import skips cached endpoint payloads. Use `--refresh` only when
-you intentionally want to spend calls again. The client caps each run below the
-stated allowance and counts retries against that cap.
-
-The UCL sample selects linked main-competition matches before applying its
-limit. Provider qualifiers and other unlinked rows are stored for diagnostics
-but never call paid stats or odds endpoints.
+and 1X2 prices where supplied. They are read from Supabase only. New results
+continue with goal-derived features when xG is unavailable.
 
 ## Train and promote
 
@@ -127,16 +98,18 @@ npm run ai:fixtures:sync -- --days=14
 npm run ai:fixtures:settle
 ```
 
-Sync and settlement try TheStatsAPI first, then Football-Data.org. Every fixture
-is routed by competition code and records the exact model family/version used.
+Domestic sync and settlement use Football-Data.co.uk first. UCL uses
+Football-Data.org first and the verified OpenLigaDB UCL season as fallback.
+Every fixture is routed by competition code and records the
+exact model family/version used.
 For knockout matches decided after 90 minutes, Football-Data.org settlement uses
 the regulation-time score rather than extra time or shootouts as the 1X2 target.
 
-## After the trial
+## Sustainable operation
 
-Remove `THESTATSAPI_KEY` and do not schedule either enrichment command. Keep the
-archived Supabase rows, trained artifact and free Football-Data.org key. The
-normal update commands continue unchanged and automatically use the fallback:
+TheStatsAPI is retired and must not be configured or scheduled. Keep its
+archived Supabase rows and trained artifact. Normal update commands use
+Football-Data.co.uk, Football-Data.org and OpenLigaDB only:
 
 ```bash
 npm run ai:learn:daily
